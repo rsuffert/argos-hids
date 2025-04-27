@@ -30,7 +30,7 @@ jobs:
       - name: Check PR description
         run: |
           description="${{ github.event.pull_request.body }}"
-          if [[ -z $description ]]; then
+          if [[ -z "$description" ]]; then
             echo "❌ PR description cannot be empty."
             exit 1
           fi
