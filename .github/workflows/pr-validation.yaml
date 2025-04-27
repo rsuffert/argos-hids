@@ -1,0 +1,41 @@
+name: Validate Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title
+        run: |
+          title="${{ github.event.pull_request.title }}"
+          title_regex="^(feat|chore|fix|test|docs|refactor|style|perf|revert):"
+          if [[ ! $title =~ $title_regex ]]; then
+            echo "❌ PR title must start with a valid prefix (e.g., feat, chore, fix, test etc.) followed by a colon."
+            exit 1
+          fi
+          echo "✅ PR title is valid."
+      - name: Check branch name
+        run: |
+          branch="${{ github.event.pull_request.head.ref }}"
+          branch_regex="^(feat|chore|fix|test|docs|refactor|style|perf|revert)/[a-z0-9-]+$"
+          if [[ ! $branch =~ $branch_regex ]]; then
+            echo "❌ Branch name must start with a valid prefix (e.g., feat, chore, fix, test etc.) followed by a slash and a descriptive name."
+            exit 1
+          fi
+          echo "✅ Branch name is valid."
+      - name: Check PR description
+        run: |
+          description="${{ github.event.pull_request.body }}"
+          if [[ -z "$description" ]]; then
+            echo "❌ PR description cannot be empty."
+            exit 1
+          fi
+          if [[ ${#description} -lt 10 ]]; then
+            echo "❌ PR description must be at least 10 characters long."
+            exit 1
+          fi
+          echo "✅ PR description is valid."
