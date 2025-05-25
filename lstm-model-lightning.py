@@ -24,8 +24,10 @@ TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
 def collate(batch):
     """Custom collate function to pad sequences and prepare batches."""
     sequences, labels = zip(*batch)
+    # PyTorch expects tensors to be floating-point, even though they are scalars in our case
     sequences = [torch.tensor(seq, dtype=torch.float32) for seq in sequences]
     lengths = torch.tensor([len(seq) for seq in sequences], dtype=torch.long)
+    # padding sequences with zeros to the maximum length in the batch
     padded_sequences = pad_sequence(sequences, batch_first=True)
     labels = torch.tensor(labels, dtype=torch.long)
     return padded_sequences, lengths, labels
@@ -57,30 +59,26 @@ class LSTMClassifier(pl.LightningModule):
         out = self.fc(h_n[-1])
         return out
 
-    def training_step(self, batch, batch_idx):
-        """Training step for one batch."""
+    def shared_step(self, batch, step_type):
+        """Shared logic for training and validation steps."""
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
         outputs = self(sequences, lengths)
         loss = self.criterion(outputs, labels)
         acc = (outputs.argmax(dim=1) == labels).float().mean()
-        self.log('train_loss', loss)
-        self.log('train_acc', acc)
+        self.log(f'{step_type}_loss', loss, prog_bar=(step_type == 'val'))
+        self.log(f'{step_type}_acc', acc, prog_bar=(step_type == 'val'))
         return loss
 
+    def training_step(self, batch, batch_idx):
+        """Training step for one batch."""
+        return self.shared_step(batch, step_type='train')
+
     def validation_step(self, batch, batch_idx):
-        """Validation step for one batch."""
-        sequences, lengths, labels = batch
-        sequences = sequences.unsqueeze(-1)
-        outputs = self(sequences, lengths)
-        loss = self.criterion(outputs, labels)
-        acc = (outputs.argmax(dim=1) == labels).float().mean()
-        self.log('val_loss', loss, prog_bar=True)
-        self.log('val_acc', acc, prog_bar=True)
+        self.shared_step(batch, step_type='val')
 
     def configure_optimizers(self):
         """Configure optimizer."""
-        print(f"Using Adam optimizer with learning rate: {self.hparams.lr}")
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 # ====================
