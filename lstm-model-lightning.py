@@ -15,7 +15,7 @@ NUM_LAYERS = 2              # Number of stacked LSTM layers
 NUM_CLASSES = 2             # Output classes: normal or attack
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 128            # Batch size for DataLoader
-MAX_EPOCHS = 4              # Number of training epochs
+MAX_EPOCHS = 50              # Number of training epochs
 TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
 
 # ====================
@@ -94,7 +94,7 @@ class LSTMClassifier(pl.LightningModule):
 # ====================
 
 # Load dataset paths
-train_normal_path, valid_normal_path, attack_data_path = load_dataset()
+valid_normal_path, train_normal_path, attack_data_path = load_dataset()
 
 # Initialize datasets
 train_normal = ADFALDDataset(train_normal_path, label=0)
@@ -112,7 +112,7 @@ valid_dataset = ConcatDataset([valid_normal, valid_attack])
 
 # Initialize DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
-valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
+valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
 
 # ====================
 # Model instantiation
