@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, ConcatDataset, random_split
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
+from torchmetrics import F1Score, Accuracy
 from dataset import ADFALDDataset, load_dataset
 
 # =============================
@@ -51,6 +52,8 @@ class LSTMClassifier(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(hidden_size, num_classes)
         self.criterion = torch.nn.CrossEntropyLoss()
+        self.accuracy = Accuracy(task='binary')
+        self.f1 = F1Score(task='binary')
 
     def forward(self, x, lengths):
         """Forward pass through LSTM and classification layer."""
@@ -64,10 +67,15 @@ class LSTMClassifier(pl.LightningModule):
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
         outputs = self(sequences, lengths)
+        preds = outputs.argmax(dim=1)
+
         loss = self.criterion(outputs, labels)
-        acc = (outputs.argmax(dim=1) == labels).float().mean()
+        acc = self.accuracy(preds, labels)
+        f1 = self.f1(preds, labels)
         self.log(f'{step_type}_loss', loss, prog_bar=(step_type == 'val'))
         self.log(f'{step_type}_acc', acc, prog_bar=(step_type == 'val'))
+        self.log(f'{step_type}_f1', f1, prog_bar=(step_type == 'val'))
+
         return loss
 
     def training_step(self, batch, batch_idx):
