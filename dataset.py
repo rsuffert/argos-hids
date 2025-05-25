@@ -10,7 +10,7 @@ class ADFALDDataset(Dataset):
 
     Args:
     root_dir (str): The root directory where the entries are located.
-    label (int): The label for the entry, where 0 represents non-malicious and 0 represents malicious.
+    label (int): The label for the entry, where 0 represents non-malicious and 1 represents malicious.
     """
     def __init__(self, root_dir: str, label: int):
         self.samples = []
