@@ -1,6 +1,37 @@
 import kagglehub
 import os
 from typing import Tuple
+from torch.utils.data import Dataset
+import torch
+
+class ADFALDDataset(Dataset):
+    """
+    Represents a subset of the ADFA-LD dataset entries with a given label.
+
+    Args:
+    root_dir (str): The root directory where the entries are located.
+    label (int): The label for the entry, where 0 represents non-malicious and 1 represents malicious.
+    """
+    def __init__(self, root_dir: str, label: int):
+        self.samples = []
+        self.label   = label
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fname in filenames:
+                if not fname.endswith(".txt"):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path) as f:
+                    calls = list(map(int, f.read().split()))
+                    self.samples.append((
+                        torch.tensor(calls, dtype=torch.long),
+                        label
+                    ))
+    
+    def __len__(self):
+        return len(self.samples)
+    
+    def __getitem__(self, idx):
+        return self.samples[idx]
 
 def load_dataset() -> Tuple[str, str, str]:
     """
