@@ -2,11 +2,13 @@ name: Validate Pull Request
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches:
       - main
 
 jobs:
   validate-pr:
+    name: Validate Pull Request
     runs-on: ubuntu-latest
     steps:
       - name: Check PR Title
@@ -28,3 +30,14 @@ jobs:
             exit 1
           fi
           echo "✅ Branch name is valid."
+      
+      - name: Check PR Description
+        run: |
+          MIN_WORDS=10
+          desc="${{ github.event.pull_request.body }}"
+          count=$(echo "$desc" | wc -w)
+          if [[ $count -lt $MIN_WORDS ]]; then
+            echo "❌ PR description is too short ($count words). Please provide a more detailed description (at least $MIN_WORDS words)."
+            exit 1
+          fi
+          echo "✅ PR description is valid."
