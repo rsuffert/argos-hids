@@ -129,8 +129,8 @@ train_dataset = HIDSSyscallsDataset(train_sequences, train_labels)
 test_dataset  = HIDSSyscallsDataset(test_sequences,  test_labels)
 
 # Initialize DataLoaders
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
-test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate)
+test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 
 # ====================
 # Model instantiation
