@@ -1,9 +1,10 @@
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader, ConcatDataset, random_split
+from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
-from dataset import ADFALDDataset, load_dataset
+import numpy as np
+import os
 
 # =============================
 # Hyperparameters and constants
@@ -93,26 +94,43 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-# Load dataset paths
-valid_normal_path, train_normal_path, attack_data_path = load_dataset()
+DONGTING_ABNORMAL_PATH = os.path.join("dataset", "dongting", "abnormal.npz")
+DONGTING_NORMAL_PATH   = os.path.join("dataset", "dongting", "normal.npz")
 
-# Initialize datasets
-train_normal = ADFALDDataset(train_normal_path, label=0)
-valid_normal = ADFALDDataset(valid_normal_path, label=0)
-attack_data = ADFALDDataset(attack_data_path, label=1)
+# Load normal and abnormal sequences
+abnormal_arr = np.load(DONGTING_NORMAL_PATH,   allow_pickle=True)["arr_0"]
+normal_arr   = np.load(DONGTING_ABNORMAL_PATH, allow_pickle=True)["arr_0"]
 
-# Split attack dataset into train and validation
-train_attack_len = int(TRAIN_ATTACK_SPLIT * len(attack_data))
-valid_attack_len = len(attack_data) - train_attack_len
-train_attack, valid_attack = random_split(attack_data, [train_attack_len, valid_attack_len])
+# Use splits 0, 1, and 3 for training; split 2 for testing
+abnormal_train = abnormal_arr[0] + abnormal_arr[1] + abnormal_arr[3]
+abnormal_test  = abnormal_arr[2]
+normal_train   = normal_arr[0] + normal_arr[1] + normal_arr[3]
+normal_test    = normal_arr[2]
 
-# Concatenate datasets
-train_dataset = ConcatDataset([train_normal, train_attack])
-valid_dataset = ConcatDataset([valid_normal, valid_attack])
+# Build final train and test sets
+train_sequences = normal_train + abnormal_train
+train_labels    = [0]*len(normal_train) + [1]*len(abnormal_train)
+test_sequences  = normal_test + abnormal_test
+test_labels     = [0]*len(normal_test) + [1]*len(abnormal_test)
+
+# Create PyTorch Datasets instances
+class HIDSSyscallsDataset(torch.utils.data.Dataset):
+    def __init__(self, sequences, labels):
+        self.sequences = sequences
+        self.labels = labels
+    
+    def __len__(self):
+        return len(self.sequences)
+    
+    def __getitem__(self, idx):
+        return self.sequences[idx], self.labels[idx]
+
+train_dataset = HIDSSyscallsDataset(train_sequences, train_labels)
+test_dataset  = HIDSSyscallsDataset(test_sequences,  test_labels)
 
 # Initialize DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
-valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
+test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate)
 
 # ====================
 # Model instantiation
@@ -136,4 +154,4 @@ trainer = pl.Trainer(
     logger=False,
     enable_checkpointing=False
 )
-trainer.fit(model, train_loader, valid_loader)
+trainer.fit(model, train_loader, test_loader)
