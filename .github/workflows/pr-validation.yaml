@@ -32,11 +32,12 @@ jobs:
           echo "✅ Branch name is valid."
       
       - name: Check PR Description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           MIN_WORDS=10
-          desc="${{ github.event.pull_request.body }}"
-          count=$(echo "$desc" | wc -w)
-          if [[ $count -lt $MIN_WORDS ]]; then
+          count=$(echo "$PR_BODY" | wc -w)
+          if [ "$count" -lt "$MIN_WORDS" ]; then
             echo "❌ PR description is too short ($count words). Please provide a more detailed description (at least $MIN_WORDS words)."
             exit 1
           fi
