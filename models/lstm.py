@@ -98,8 +98,8 @@ DONGTING_ABNORMAL_PATH = os.path.join("dataset", "dongting", "abnormal.npz")
 DONGTING_NORMAL_PATH   = os.path.join("dataset", "dongting", "normal.npz")
 
 # Load normal and abnormal sequences
-abnormal_arr = np.load(DONGTING_NORMAL_PATH,   allow_pickle=True)["arr_0"]
-normal_arr   = np.load(DONGTING_ABNORMAL_PATH, allow_pickle=True)["arr_0"]
+abnormal_arr = np.load(DONGTING_ABNORMAL_PATH, allow_pickle=True)["arr_0"]
+normal_arr   = np.load(DONGTING_NORMAL_PATH,   allow_pickle=True)["arr_0"]
 
 # Use splits 0, 1, and 3 for training; split 2 for testing
 abnormal_train = abnormal_arr[0] + abnormal_arr[1] + abnormal_arr[3]
