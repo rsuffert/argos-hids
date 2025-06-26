@@ -94,8 +94,11 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-DONGTING_ABNORMAL_PATH = os.path.join("dataset", "dongting", "abnormal.npz")
-DONGTING_NORMAL_PATH   = os.path.join("dataset", "dongting", "normal.npz")
+DONGTING_ABNORMAL_PATH = os.path.join("dataset", "dongting", "syscall_seqs_label_1.npz")
+DONGTING_NORMAL_PATH   = os.path.join("dataset", "dongting", "syscall_seqs_label_0.npz")
+
+assert os.path.exists(DONGTING_ABNORMAL_PATH), f"Abnormal data file not found at '{DONGTING_ABNORMAL_PATH}'"
+assert os.path.exists(DONGTING_NORMAL_PATH),   f"Normal data file not found at '{DONGTING_NORMAL_PATH}'"
 
 # Load normal and abnormal sequences
 abnormal_arr = np.load(DONGTING_ABNORMAL_PATH, allow_pickle=True)["arr_0"]
