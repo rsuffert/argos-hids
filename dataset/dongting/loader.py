@@ -27,6 +27,7 @@ from typing import Dict, List, Union
 import os
 import pandas as pd
 import numpy as np
+import h5py
 
 def get_mandatory_env_var(name: str) -> str:
 	value = os.getenv(name)
@@ -77,139 +78,55 @@ def load_baseline_xlsx(path: str) -> pd.DataFrame:
     """
     return pd.read_excel(os.path.expanduser(path))
 
-def load_labeled_syscall_sequences(baseline_df: pd.DataFrame, syscall_map: Dict[str, int], normal_folder: str, abnormal_folder: str) -> Dict[int, Dict[str, List[List[int]]]]:
-    """
-    Loads and encodes labeled system call sequences from files specified in a baseline DataFrame,
-    organizing them by label and dataset split.
-
-    This function iterates over each entry in the provided DataFrame, constructs the corresponding filename,
-    and searches for the file in the specified normal and abnormal folders. If found, it reads the system call sequence,
-    encodes it into a list of integer IDs using the provided syscall map, and stores it in a nested dictionary structure
-    organized by label (normal or abnormal) and dataset split (train, test, validation).
-
-    Args:
-        baseline_df (pd.DataFrame): DataFrame containing metadata for each sequence, including bug name, label, and class (split).
-        syscall_map (Dict[str, int]): Mapping from syscall names to integer IDs.
-        normal_folder (str): Path to the folder containing normal sequences.
-        abnormal_folder (str): Path to the folder containing abnormal sequences.
-
-    Returns:
-        Dict[int, Dict[str, List[List[int]]]]: Nested dictionary where the first key is the label (0 for normal, 1 for abnormal), the second key is the dataset split ("DTDS-train", "DTDS-test", "DTDS-validation"), and the value is a list of encoded syscall sequences (each sequence is a list of integer IDs).
-
-    Raises:
-        KeyError: If a syscall in a sequence is not found in the syscall_map.
-
-    Notes:
-        - If a file corresponding to a DataFrame entry is not found in either folder, a warning is printed and the entry is skipped.
-        - The function assumes that the bug names in the DataFrame may need to be prefixed with "sy_" and suffixed with ".log" to match the actual filenames.
-    """
-    def encode_syscall_sequence(sequence: str, syscall_map: Dict[str, int]) -> List[int]:
-        """
-        Encodes a sequence of system calls into a list of integer IDs based on a provided mapping.
-
-        Args:
-            sequence (str): A string of system calls separated by the '|' character.
-            syscall_map (Dict[str, int]): A dictionary mapping syscall names to integer IDs.
-
-        Returns:
-            List[int]: A list of integer IDs corresponding to the system calls in the input sequence.
-
-        Raises:
-            KeyError: If a syscall in the sequence is not found in the syscall_map.
-        """
-        encoded_sequence = []
-        for sc in sequence.split('|'):
-            if sc not in syscall_map:
-                raise KeyError(f"Syscall '{sc}' not found in syscall map.")
-            encoded_sequence.append(syscall_map[sc])
-        return encoded_sequence
-    def find_file_in_folder(filename: str, folder: str) -> Union[str, None]:
-        """
-        Searches for a file with the specified filename within the given folder (recursively).
-        If found, reads and returns the contents of the file as a stripped string.
-        If the file is not found, returns None.
-
-        Args:
-            filename (str): The name of the file to search for.
-            folder (str): The path to the folder in which to search.
-
-        Returns:
-            Union[str, None]: The stripped contents of the found file, or None if not found.
-        """
-        for root, _, files in os.walk(os.path.expanduser(folder)):
-            for fname in files:
-                if fname != filename:
+def generate_h5s(baseline_df: pd.DataFrame, syscall_map: Dict[str, int], *raw_data_dirs: str) -> None:
+    def find_seq_file_by_bugname(bugname: str, *dirs: str) -> Union[str, None]:
+        # For some reason, sometimes the bug names in the dataframe do not include the "sy_"
+        # prefix or the ".log" suffix as the raw files do, so we ensure they're added here.
+        filename = bugname
+        if not filename.startswith("sy_"):
+            filename = "sy_" + filename
+        if not filename.endswith(".log"):
+            filename = filename + ".log"
+        for dirname in dirs:
+            for root, _, files in os.walk(dirname):
+                filtered_files = list(filter(lambda f: f == filename, files))
+                if not filtered_files:
                     continue
-                fpath = os.path.join(root, fname)
-                with open(fpath, 'r') as f:
-                    return f.read().strip()
+                return os.path.join(root, filtered_files[0])
         return None
 
-    # Skeleton for the dictionary to be returned.
-    # Each list will contain a List[int], which represents a syscall sequence where
-    # each int is representing a syscall ID as per the syscall map.
-    sequences_per_label = {
-        1: {
-            "DTDS-train": [],
-            "DTDS-test": [],
-            "DTDS-validation": []
-        },
-        0: {
-            "DTDS-train": [],
-            "DTDS-test": [],
-            "DTDS-validation": []
-        }
-    }
-    for idx, row in baseline_df.iterrows():
-        # For some reason the bug names in the dataset do not include the "sy_" prefix or ".log" extension
-        # as their correspoding files in the dataset, so we ensure they're added here to locate the files
-        # correctly.
-        fname = row["kcb_bug_name"]
-        if not fname.startswith("sy_"):
-            fname = "sy_" + fname
-        if not fname.endswith(".log"):
-            fname = fname + ".log"
-        label = 0 if row["kcb_seq_lables"] == "Normal" else 1
-        _class = row["kcb_seq_class"]
-        content = find_file_in_folder(fname, normal_folder) or find_file_in_folder(fname, abnormal_folder)
-        if not content:
-            print(f"Warning: File '{fname}' not found in the dataset. Skipping this entry.")
-            continue
-        encoded_sequence = encode_syscall_sequence(content, syscall_map)
-        sequences_per_label[label][_class].append(encoded_sequence)
-        print(f"({idx+1}) Successfully loaded sequence for file '{fname}' with label {label}.")
-    return sequences_per_label
+    encode = lambda seq: [syscall_map[sname] for sname in seq.split("|")]
 
-def store_labeled_sequences_to_npz(sequences: Dict[int, Dict[str, List[List[int]]]]) -> None:
-    """
-    Stores labeled syscall sequences into compressed NumPy .npz files.
+    LABEL_COL = "kcb_seq_lables"
+    SPLIT_COL = "kcb_seq_class"
+    BNAME_COL = "kcb_bug_name"
+    MAX_SEQ_LEN = 4495
 
-    For each label in the input dictionary, this function saves the corresponding
-    training, testing, and validation sequences into a separate compressed .npz file.
-    Each file is named 'syscall_seqs_label_{label}.npz', where {label} is the label key.
-
-    Args:
-        sequences (Dict[int, Dict[str, List[List[int]]]]): 
-            A dictionary mapping integer labels to another dictionary with keys 
-            'DTDS-train', 'DTDS-test', and 'DTDS-validation', each containing a list 
-            of syscall sequences (lists of integers).
-
-    Returns:
-        None
-
-    Side Effects:
-        Writes compressed .npz files to disk for each label in the input dictionary.
-        Prints a message for each file stored.
-    """
-    for label, data in sequences.items():
-        npz_filename = f"syscall_seqs_label_{label}.npz"
-        np.savez_compressed(
-            npz_filename,
-            train=np.array(sequences[label]["DTDS-train"], dtype=object),
-            test=np.array(sequences[label]["DTDS-test"], dtype=object),
-            validation=np.array(sequences[label]["DTDS-validation"], dtype=object),
-        )
-        print(f"Stored labeled sequences for label {label} in '{npz_filename}' (compressed).")
+    for label in baseline_df[LABEL_COL].unique():
+        for split in baseline_df[SPLIT_COL].unique():
+            filtered_df = baseline_df[(baseline_df[LABEL_COL] == label) & (baseline_df[SPLIT_COL] == split)]
+            h5name = f'syscall_seqs_{label}_{split}.h5'
+            with h5py.File(h5name, 'w') as h5f:
+                dset = h5f.create_dataset("sequences",
+                    shape=(len(filtered_df), MAX_SEQ_LEN), maxshape=(None, None),
+                    dtype='int16', compression='gzip'
+                )
+                for i, row in filtered_df.iterrows():
+                    seq_file = find_seq_file_by_bugname(row[BNAME_COL], *raw_data_dirs)
+                    if not seq_file:
+                        print(f"Warning: Sequence file for bug name '{row[BNAME_COL]}' not found in provided directories.")
+                        continue
+                    with open(seq_file, 'r') as f:
+                        encoded_seq = encode(f.read().strip())
+                    if len(encoded_seq) > dset.shape[1]:
+                        dset.resize((dset.shape[0], len(encoded_seq)))
+                    # Write the encoded sequence to the dataset
+                    dset[i, :len(encoded_seq)] = encoded_seq
+                    # Pad the rest with -1 to indicate unused space
+                    dset[i, len(encoded_seq):] = -1
+            assert os.path.exists(h5name), f"Failed to create {h5name}."
+            assert os.path.getsize(h5name) > 0, f"{h5name} is empty after creation."
+            print(f"Successfully generated '{h5name}' with {len(filtered_df)} sequences for label '{label}' and split '{split}'.")
 
 if __name__ == "__main__":
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
@@ -220,12 +137,10 @@ if __name__ == "__main__":
     assert not baseline_df.empty, "Baseline DataFrame is empty. Check the .xlsx file or path."
     print(f"Loaded baseline DataFrame with {len(baseline_df)} rows.")
 
-    print(f"Loading labeled syscall sequences from '{NORMAL_DATA_FOLDER_PATH}' and '{ABNORMAL_DATA_FOLDER_PATH}' (this can take a while)...")
-    labeled_sequences = load_labeled_syscall_sequences(
-        baseline_df, syscall_map, NORMAL_DATA_FOLDER_PATH, ABNORMAL_DATA_FOLDER_PATH
+    print("Generating .h5 files for normal and abnormal sequences. This may take a while...")
+    generate_h5s(
+        baseline_df,
+        syscall_map,
+        os.path.expanduser(NORMAL_DATA_FOLDER_PATH),
+        os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
     )
-    assert labeled_sequences[0] and labeled_sequences[1], "Labeled syscall sequences were not loaded correctly. Check the data files and paths."
-    print(f"Successfully loaded {len(labeled_sequences[0])} normal and {len(labeled_sequences[1])} abnormal syscall sequences.")
-
-    print("Storing labeled syscall sequences to .npz files...")
-    store_labeled_sequences_to_npz(labeled_sequences)
