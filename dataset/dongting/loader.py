@@ -1,31 +1,5 @@
-"""
-loader.py
-
-This script loads system call sequences for the DongTing dataset from a labeled baseline Excel file
-and corresponding log files(stored in normal and abnormal folders), encodes them using a syscall table,
-and exports the processed sequences into compressed NumPy .npz files for each label (normal/abnormal).
-All of these files are provided as part of the DongTing dataset and can be downloaded from here:
-https://zenodo.org/records/6627050.
-
-The script supports recursive search for log files and can be used for preparing datasets for anomaly
-detection or intrusion detection experiments.
-
-Usage:
-    python loader.py
-
-Environment Variables:
-    BASELINE_XLSX_PATH        Path to the baseline DongTing Excel file.
-    NORMAL_DATA_FOLDER_PATH   Path to the DongTing folder containing normal log files.
-    ABNORMAL_DATA_FOLDER_PATH Path to the DongTing folder containing abnormal log files.
-
-Outputs:
-    syscall_seqs_label_0.npz  Compressed file with DongTing normal sequences, categorized in training, testing, and validation splits.
-    syscall_seqs_label_1.npz  Compressed file with DongTing abnormal sequences, categorized in training, testing, and validation splits.
-"""
-
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Callable
 import os
-import pandas as pd
 import numpy as np
 import h5py
 
@@ -35,7 +9,6 @@ def get_mandatory_env_var(name: str) -> str:
 		raise EnvironmentError(f"Environment variable '{name}' is required but not set.")
 	return value
 
-BASELINE_XLSX_PATH: str        = get_mandatory_env_var('BASELINE_XLSX_PATH')
 NORMAL_DATA_FOLDER_PATH: str   = get_mandatory_env_var('NORMAL_DATA_FOLDER_PATH')
 ABNORMAL_DATA_FOLDER_PATH: str = get_mandatory_env_var('ABNORMAL_DATA_FOLDER_PATH')
 SYSCALL_TBL_PATH: str          = os.path.join(os.path.dirname(__file__), 'syscall_64.tbl')
@@ -66,81 +39,98 @@ def parse_syscall_tbl(path: str) -> Dict[str, int]:
             syscalls_map[syscall_name] = syscall_id
     return syscalls_map
 
-def load_baseline_xlsx(path: str) -> pd.DataFrame:
+def parse_raw_seq_file(path: str, separator: str, syscall_map: Dict[str, int]) -> List[int]:
     """
-    Loads an Excel (.xlsx) file from the specified path into a pandas DataFrame.
+    Parses a raw sequence file containing system call names separated by a specified separator,
+    and maps each system call name to its corresponding integer ID using the provided syscall_map.
 
     Args:
-        path (str): The file path to the Excel file. The path can include '~' to represent the user's home directory.
+        path (str): The path to the raw sequence file.
+        separator (str): The string used to separate system call names in the file.
+        syscall_map (Dict[str, int]): A dictionary mapping system call names to integer IDs.
 
     Returns:
-        pd.DataFrame: A DataFrame containing the data from the Excel file.
+        List[int]: A list of integer IDs corresponding to the system call names in the file.
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+        KeyError: If a system call name in the file is not found in syscall_map.
     """
-    return pd.read_excel(os.path.expanduser(path))
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found: {path}")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Path is not a file: {path}")
+    if not path.endswith(".log"):
+        raise ValueError(f"File {path} should be a .log file from the DongTing dataset")
+    with open(path, 'r') as f:
+        content = f.read().strip()
+    return list(map(
+        lambda sysname: int(syscall_map[sysname]),
+        content.split(separator)
+    ))
 
-def generate_h5s(baseline_df: pd.DataFrame, syscall_map: Dict[str, int], *raw_data_dirs: str) -> None:
-    def find_seq_file_by_bugname(bugname: str, *dirs: str) -> Union[str, None]:
-        # For some reason, sometimes the bug names in the dataframe do not include the "sy_"
-        # prefix or the ".log" suffix as the raw files do, so we ensure they're added here.
-        filename = bugname
-        if not filename.startswith("sy_"):
-            filename = "sy_" + filename
-        if not filename.endswith(".log"):
-            filename = filename + ".log"
-        for dirname in dirs:
-            for root, _, files in os.walk(dirname):
-                filtered_files = list(filter(lambda f: f == filename, files))
-                if not filtered_files:
-                    continue
-                return os.path.join(root, filtered_files[0])
-        return None
+def process_and_store_sequences(
+    base_dir_path: str,
+    file_parser: Callable[str, List[int]],
+    batch_size: int = 1000,
+    ) -> None:
+    """
+    Processes sequence files in a directory, parses them using a provided parser, and stores the resulting sequences in an HDF5 file.
+    Args:
+        base_dir_path (str): Path to the directory containing sequence files to process.
+        file_parser (Callable[[str], List[int]]): Function that takes a file path and returns a list of integers representing a sequence.
+        batch_size (int, optional): Number of sequences to process and write to the HDF5 file at a time. Defaults to 1000.
+    Creates:
+        An HDF5 file named 'sequences.h5' in the specified directory, containing all parsed sequences as variable-length arrays of int16, compressed with gzip.
+    """
+    if not os.path.exists(base_dir_path):
+        raise FileNotFoundError(f"Directory not found: {base_dir_path}")
+    if not os.path.isdir(base_dir_path):
+        raise NotADirectoryError(f"Path is not a directory: {base_dir_path}")
+    
+    h5py_path = os.path.join(base_dir_path, 'sequences.h5')
+    with h5py.File(h5py_path, 'w') as h5f:
+        dset = h5f.create_dataset("sequences",
+            shape=(0,), maxshape=(None,),
+            dtype=h5py.special_dtype(vlen=np.dtype('int16')),
+            compression="gzip"
+        )
 
-    encode = lambda seq: [syscall_map[sname] for sname in seq.split("|")]
-
-    LABEL_COL = "kcb_seq_lables"
-    SPLIT_COL = "kcb_seq_class"
-    BNAME_COL = "kcb_bug_name"
-    MAX_SEQ_LEN = 4495
-
-    for label in baseline_df[LABEL_COL].unique():
-        for split in baseline_df[SPLIT_COL].unique():
-            filtered_df = baseline_df[(baseline_df[LABEL_COL] == label) & (baseline_df[SPLIT_COL] == split)]
-            h5name = f'syscall_seqs_{label}_{split}.h5'
-            with h5py.File(h5name, 'w') as h5f:
-                dset = h5f.create_dataset("sequences",
-                    shape=(len(filtered_df), MAX_SEQ_LEN), maxshape=(None, None),
-                    dtype='int16', compression='gzip'
-                )
-                for i, row in filtered_df.iterrows():
-                    seq_file = find_seq_file_by_bugname(row[BNAME_COL], *raw_data_dirs)
-                    if not seq_file:
-                        print(f"Warning: Sequence file for bug name '{row[BNAME_COL]}' not found in provided directories.")
-                        continue
-                    with open(seq_file, 'r') as f:
-                        encoded_seq = encode(f.read().strip())
-                    if len(encoded_seq) > dset.shape[1]:
-                        dset.resize((dset.shape[0], len(encoded_seq)))
-                    # Write the encoded sequence to the dataset
-                    dset[i, :len(encoded_seq)] = encoded_seq
-                    # Pad the rest with -1 to indicate unused space
-                    dset[i, len(encoded_seq):] = -1
-            assert os.path.exists(h5name), f"Failed to create {h5name}."
-            assert os.path.getsize(h5name) > 0, f"{h5name} is empty after creation."
-            print(f"Successfully generated '{h5name}' with {len(filtered_df)} sequences for label '{label}' and split '{split}'.")
+        batch = []
+        for fname in os.listdir(base_dir_path):
+            if fname.endswith('.h5'): continue # Skip the HDF5 file itself
+            fpath = os.path.join(base_dir_path, fname)
+            print(f"Processing sequences from file: {fpath}")
+            seq = file_parser(fpath)
+            batch.append(np.array(seq, dtype=np.int16))
+            if len(batch) == batch_size:
+                dset.resize((dset.shape[0] + batch_size,))
+                dset[-batch_size:] = batch
+                batch = []
+        
+        # Write any remaining sequences in the batch
+        if batch:
+            dset.resize((dset.shape[0] + len(batch),))
+            dset[-len(batch):] = batch
 
 if __name__ == "__main__":
+    assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file does not exist: {SYSCALL_TBL_PATH}"
+    assert os.path.isfile(SYSCALL_TBL_PATH), f"Syscall table path is not a file: {SYSCALL_TBL_PATH}"
+
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
     print(f"Loaded {len(syscall_map)} syscalls from the syscall table.")
 
-    baseline_df = load_baseline_xlsx(BASELINE_XLSX_PATH)
-    assert not baseline_df.empty, "Baseline DataFrame is empty. Check the .xlsx file or path."
-    print(f"Loaded baseline DataFrame with {len(baseline_df)} rows.")
+    file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
 
-    print("Generating .h5 files for normal and abnormal sequences. This may take a while...")
-    generate_h5s(
-        baseline_df,
-        syscall_map,
+    for dirpath in [
         os.path.expanduser(NORMAL_DATA_FOLDER_PATH),
         os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
-    )
+    ]:
+        print(f"Processing sequences from {dirpath}...")
+        for subdirname in os.listdir(dirpath):
+            subdirpath = os.path.join(dirpath, subdirname)
+            if not os.path.isdir(subdirpath):
+                continue
+            process_and_store_sequences(subdirpath, file_parser)
+            print(f"Processed sequences from {subdirpath} and stored in HDF5 format.")
