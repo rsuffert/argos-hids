@@ -4,16 +4,12 @@ import numpy as np
 import h5py
 import concurrent.futures
 import logging
+import pandas as pd
 
-def get_mandatory_env_var(name: str) -> str:
-	value = os.getenv(name)
-	if not value:
-		raise EnvironmentError(f"Environment variable '{name}' is required but not set.")
-	return value
-
-NORMAL_DATA_FOLDER_PATH: str   = get_mandatory_env_var('NORMAL_DATA_FOLDER_PATH')
-ABNORMAL_DATA_FOLDER_PATH: str = get_mandatory_env_var('ABNORMAL_DATA_FOLDER_PATH')
-SYSCALL_TBL_PATH: str          = os.path.join(os.path.dirname(__file__), 'syscall_64.tbl')
+SYSCALL_TBL_PATH          = os.getenv('SYSCALL_TBL_PATH',          os.path.join(os.path.dirname(__file__), 'syscall_64.tbl'))
+NORMAL_DATA_FOLDER_PATH   = os.getenv('NORMAL_DATA_FOLDER_PATH',   os.path.join(os.path.dirname(__file__), 'Normal_data'))
+ABNORMAL_DATA_FOLDER_PATH = os.getenv('ABNORMAL_DATA_FOLDER_PATH', os.path.join(os.path.dirname(__file__), 'Abnormal_data'))
+BASELINE_XLSX_PATH        = os.getenv('BASELINE_XLSX_PATH',        os.path.join(os.path.dirname(__file__), 'Baseline.xlsx'))
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -63,12 +59,6 @@ def parse_raw_seq_file(path: str, separator: str, syscall_map: Dict[str, int]) -
         FileNotFoundError: If the specified file does not exist.
         KeyError: If a system call name in the file is not found in syscall_map.
     """
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"File not found: {path}")
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Path is not a file: {path}")
-    if not path.endswith(".log"):
-        raise ValueError(f"File {path} should be a .log file from the DongTing dataset")
     with open(path, 'r') as f:
         content = f.read().strip()
     return list(map(
@@ -76,73 +66,85 @@ def parse_raw_seq_file(path: str, separator: str, syscall_map: Dict[str, int]) -
         content.split(separator)
     ))
 
-def process_and_store_sequences(
-    base_dir_path: str,
-    file_parser: Callable[str, List[int]],
-    batch_size: int = 20,
-    ) -> None:
+def append_seq_to_h5(sequence: List[int], h5_path: str) -> None:
     """
-    Processes sequence files in a directory, parses them using a provided parser, and stores the resulting sequences in an HDF5 file.
-    Args:
-        base_dir_path (str): Path to the directory containing sequence files to process.
-        file_parser (Callable[[str], List[int]]): Function that takes a file path and returns a list of integers representing a sequence.
-        batch_size (int, optional): Number of sequences to process and write to the HDF5 file at a time. Defaults to 1000.
-    Creates:
-        An HDF5 file named 'sequences.h5' in the specified directory, containing all parsed sequences as variable-length arrays of int16, compressed with gzip.
-    """
-    if not os.path.exists(base_dir_path):
-        raise FileNotFoundError(f"Directory not found: {base_dir_path}")
-    if not os.path.isdir(base_dir_path):
-        raise NotADirectoryError(f"Path is not a directory: {base_dir_path}")
-    
-    h5py_path = os.path.join(base_dir_path, 'sequences.h5')
-    with h5py.File(h5py_path, 'w') as h5f:
-        dset = h5f.create_dataset("sequences",
-            shape=(0,), maxshape=(None,),
-            dtype=h5py.special_dtype(vlen=np.dtype('int16')),
-            compression="gzip"
-        )
+    Appends a sequence of integers to an HDF5 file under the dataset "sequences".
 
-        batch = []
-        for fname in os.listdir(base_dir_path):
-            if fname.endswith('.h5'): continue # Skip the HDF5 file itself
-            fpath = os.path.join(base_dir_path, fname)
-            logging.debug(f"Processing sequences from file: {fpath}")
-            seq = file_parser(fpath)
-            batch.append(np.array(seq, dtype=np.int16))
-            if len(batch) == batch_size:
-                dset.resize((dset.shape[0] + batch_size,))
-                dset[-batch_size:] = batch
-                batch = []
-        
-        # Write any remaining sequences in the batch
-        if batch:
-            dset.resize((dset.shape[0] + len(batch),))
-            dset[-len(batch):] = batch
+    If the "sequences" dataset does not exist, it is created as a variable-length dataset
+    of 16-bit integers with gzip compression. Each call appends the given sequence as a new entry.
+
+    Args:
+        sequence (List[int]): The sequence of integers to append.
+        h5_path (str): Path to the HDF5 file.
+    """
+    arr = np.array(sequence, dtype=np.int16)
+    with h5py.File(h5_path, 'a') as h5f:
+        if "sequences" not in h5f:
+            h5f.create_dataset("sequences",
+                shape=(0,), maxshape=(None,),
+                dtype=h5py.special_dtype(vlen=np.dtype('int16')),
+                compression="gzip"
+            )
+        dset = h5f["sequences"]
+        dset.resize((dset.shape[0] + 1,))
+        dset[-1] = arr
+
+def parse_and_store_sequences(
+        *base_dirs: str,
+        file_parser: Callable[[str], List[int]],
+        label_and_class_getter: Callable[str, Union[None, tuple[int, str]]],
+    ) -> None:
+    for basedir_path in base_dirs:
+        for root, _, files in os.walk(basedir_path):
+            for fname in files:
+                if fname.endswith(".h5"): continue # Skip the H5 files themselves
+                
+                fpath = os.path.join(root, fname)
+
+                bugname = fname
+                if bugname.startswith("sy_"): bugname = bugname[3:]
+                if bugname.endswith(".log"):  bugname = bugname[:-4]
+                
+                logging.debug(f"Processing file: {fpath}")
+                sequence = file_parser(fpath)
+                label, class_ = label_and_class_getter(bugname)
+                if not label or not class_:
+                    logging.warning(f"Label or class not found for bug name '{bugname}' in file '{fpath}'. Skipping...")
+                    continue
+                
+                append_seq_to_h5(sequence, f"{label}_{class_}.h5")
 
 if __name__ == "__main__":
-    assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file does not exist: {SYSCALL_TBL_PATH}"
-    assert os.path.isfile(SYSCALL_TBL_PATH), f"Syscall table path is not a file: {SYSCALL_TBL_PATH}"
-
+    assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file not found: {SYSCALL_TBL_PATH}"
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
     logging.info(f"Loaded {len(syscall_map)} syscalls from the syscall table.")
 
+    assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
+    baseline_df = pd.read_excel(BASELINE_XLSX_PATH)
+    assert not baseline_df.empty, f"Baseline DataFrame is empty. Check the file: {BASELINE_XLSX_PATH}"
+    logging.info(f"Loaded baseline data with {len(baseline_df)} rows from.")
+
     file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
+    def label_and_class_getter(bugname: str) -> Union[None, tuple[int, str]]:
+        row = baseline_df[baseline_df["kcb_bug_name"] == bugname]
+        if row.empty: return None, None
+        return row["kcb_seq_lables"].values[0], row["kcb_seq_class"].values[0]
 
-    expanded_normal_path = os.path.expanduser(NORMAL_DATA_FOLDER_PATH)
-    for dirname1 in os.listdir(expanded_normal_path):
-        dirpath1 = os.path.join(expanded_normal_path, dirname1)
-        if not os.path.isdir(dirpath1): continue
-        for dirname2 in os.listdir(dirpath1):
-            dirpath2 = os.path.join(dirpath1, dirname2)
-            if not os.path.isdir(dirpath2): continue
-            logging.info(f"Processing sequences from {dirpath2}")
-            process_and_store_sequences(dirpath2, file_parser)
+    assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"Normal data folder not found: {NORMAL_DATA_FOLDER_PATH}"
+    assert os.path.isdir(NORMAL_DATA_FOLDER_PATH), f"Path is not a directory: {NORMAL_DATA_FOLDER_PATH}"
+    logging.info(f"Starting to parse sequences from '{NORMAL_DATA_FOLDER_PATH}'")
+    parse_and_store_sequences(
+        NORMAL_DATA_FOLDER_PATH,
+        file_parser=file_parser,
+        label_and_class_getter=label_and_class_getter
+    )
 
-    expanded_abnormal_path = os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
-    for dirname in os.listdir(expanded_abnormal_path):
-        dirpath = os.path.join(expanded_abnormal_path, dirname)
-        if not os.path.isdir(dirpath): continue
-        logging.info(f"Processing sequences from {dirpath}")
-        process_and_store_sequences(dirpath, file_parser)
+    assert os.path.exists(ABNORMAL_DATA_FOLDER_PATH), f"Abnormal data folder not found: {ABNORMAL_DATA_FOLDER_PATH}"
+    assert os.path.isdir(ABNORMAL_DATA_FOLDER_PATH), f"Path is not a directory: {ABNORMAL_DATA_FOLDER_PATH}"
+    logging.info(f"Starting to parse sequences from '{ABNORMAL_DATA_FOLDER_PATH}'")
+    parse_and_store_sequences(
+        ABNORMAL_DATA_FOLDER_PATH,
+        file_parser=file_parser,
+        label_and_class_getter=label_and_class_getter
+    )
