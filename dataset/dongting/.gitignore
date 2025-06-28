@@ -8,3 +8,6 @@
 
 # Baseline/reference spreadsheets
 *.xlsx
+
+# Mapping from syscall names to syscall IDs
+*.tbl
