@@ -2,6 +2,7 @@ from typing import Dict, List, Union, Callable
 import os
 import numpy as np
 import h5py
+import concurrent.futures
 
 def get_mandatory_env_var(name: str) -> str:
 	value = os.getenv(name)
@@ -123,7 +124,8 @@ if __name__ == "__main__":
 
     file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
 
-    print(f"Processing normal sequences from {NORMAL_DATA_FOLDER_PATH}")
+    subdirs = []
+
     expanded_normal_path = os.path.expanduser(NORMAL_DATA_FOLDER_PATH)
     for dirname1 in os.listdir(expanded_normal_path):
         dirpath1 = os.path.join(expanded_normal_path, dirname1)
@@ -132,12 +134,22 @@ if __name__ == "__main__":
             dirpath2 = os.path.join(dirpath1, dirname2)
             if not os.path.isdir(dirpath2): continue
             print(f"Processing normal sequences from {dirpath2}")
-            process_and_store_sequences(dirpath2, file_parser)
-    
-    print(f"Processing abnormal sequences from {ABNORMAL_DATA_FOLDER_PATH}")
+            subdirs.append(dirpath2)
+
     expanded_abnormal_path = os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
     for dirname in os.listdir(expanded_abnormal_path):
         dirpath = os.path.join(expanded_abnormal_path, dirname)
         if not os.path.isdir(dirpath): continue
         print(f"Processing abnormal sequences from {dirpath}")
-        process_and_store_sequences(dirpath, file_parser)
+        subdirs.append(dirpath)
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(process_and_store_sequences, subdir, file_parser)
+            for subdir in subdirs
+        ]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing sequences: {e}")
