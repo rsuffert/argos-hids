@@ -3,6 +3,7 @@ import os
 import numpy as np
 import h5py
 import concurrent.futures
+import logging
 
 def get_mandatory_env_var(name: str) -> str:
 	value = os.getenv(name)
@@ -13,6 +14,11 @@ def get_mandatory_env_var(name: str) -> str:
 NORMAL_DATA_FOLDER_PATH: str   = get_mandatory_env_var('NORMAL_DATA_FOLDER_PATH')
 ABNORMAL_DATA_FOLDER_PATH: str = get_mandatory_env_var('ABNORMAL_DATA_FOLDER_PATH')
 SYSCALL_TBL_PATH: str          = os.path.join(os.path.dirname(__file__), 'syscall_64.tbl')
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 def parse_syscall_tbl(path: str) -> Dict[str, int]:
     """
@@ -101,7 +107,7 @@ def process_and_store_sequences(
         for fname in os.listdir(base_dir_path):
             if fname.endswith('.h5'): continue # Skip the HDF5 file itself
             fpath = os.path.join(base_dir_path, fname)
-            print(f"Processing sequences from file: {fpath}")
+            logging.debug(f"Processing sequences from file: {fpath}")
             seq = file_parser(fpath)
             batch.append(np.array(seq, dtype=np.int16))
             if len(batch) == batch_size:
@@ -120,7 +126,7 @@ if __name__ == "__main__":
 
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
-    print(f"Loaded {len(syscall_map)} syscalls from the syscall table.")
+    logging.info(f"Loaded {len(syscall_map)} syscalls from the syscall table.")
 
     file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
 
@@ -133,14 +139,14 @@ if __name__ == "__main__":
         for dirname2 in os.listdir(dirpath1):
             dirpath2 = os.path.join(dirpath1, dirname2)
             if not os.path.isdir(dirpath2): continue
-            print(f"Processing normal sequences from {dirpath2}")
+            logging.info(f"Processing sequences from {dirpath2}")
             subdirs.append(dirpath2)
 
     expanded_abnormal_path = os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
     for dirname in os.listdir(expanded_abnormal_path):
         dirpath = os.path.join(expanded_abnormal_path, dirname)
         if not os.path.isdir(dirpath): continue
-        print(f"Processing abnormal sequences from {dirpath}")
+        logging.info(f"Processing sequences from {dirpath}")
         subdirs.append(dirpath)
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -152,4 +158,4 @@ if __name__ == "__main__":
             try:
                 future.result()
             except Exception as e:
-                print(f"Error processing sequences: {e}")
+                logging.error(f"Error processing sequences: {e}")
