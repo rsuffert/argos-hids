@@ -73,7 +73,7 @@ def parse_raw_seq_file(path: str, separator: str, syscall_map: Dict[str, int]) -
 def process_and_store_sequences(
     base_dir_path: str,
     file_parser: Callable[str, List[int]],
-    batch_size: int = 100,
+    batch_size: int = 20,
     ) -> None:
     """
     Processes sequence files in a directory, parses them using a provided parser, and stores the resulting sequences in an HDF5 file.
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         if not os.path.isdir(dirpath): continue
         print(f"Processing abnormal sequences from {dirpath}")
         subdirs.append(dirpath)
-    
+
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(process_and_store_sequences, subdir, file_parser)
