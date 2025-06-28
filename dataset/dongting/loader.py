@@ -123,14 +123,21 @@ if __name__ == "__main__":
 
     file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
 
-    for dirpath in [
-        os.path.expanduser(NORMAL_DATA_FOLDER_PATH),
-        os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
-    ]:
-        print(f"Processing sequences from {dirpath}...")
-        for subdirname in os.listdir(dirpath):
-            subdirpath = os.path.join(dirpath, subdirname)
-            if not os.path.isdir(subdirpath):
-                continue
-            process_and_store_sequences(subdirpath, file_parser)
-            print(f"Processed sequences from {subdirpath} and stored in HDF5 format.")
+    print(f"Processing normal sequences from {NORMAL_DATA_FOLDER_PATH}")
+    expanded_normal_path = os.path.expanduser(NORMAL_DATA_FOLDER_PATH)
+    for dirname1 in os.listdir(expanded_normal_path):
+        dirpath1 = os.path.join(expanded_normal_path, dirname1)
+        if not os.path.isdir(dirpath1): continue
+        for dirname2 in os.listdir(dirpath1):
+            dirpath2 = os.path.join(dirpath1, dirname2)
+            if not os.path.isdir(dirpath2): continue
+            print(f"Processing normal sequences from {dirpath2}")
+            process_and_store_sequences(dirpath2, file_parser)
+    
+    print(f"Processing abnormal sequences from {ABNORMAL_DATA_FOLDER_PATH}")
+    expanded_abnormal_path = os.path.expanduser(ABNORMAL_DATA_FOLDER_PATH)
+    for dirname in os.listdir(expanded_abnormal_path):
+        dirpath = os.path.join(expanded_abnormal_path, dirname)
+        if not os.path.isdir(dirpath): continue
+        print(f"Processing abnormal sequences from {dirpath}")
+        process_and_store_sequences(dirpath, file_parser)
