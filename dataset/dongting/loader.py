@@ -95,6 +95,16 @@ def parse_and_store_sequences(
         label_and_class_getter: Callable[str, Union[None, tuple[int, str]]],
         trim_log_ext: bool = True
     ) -> None:
+    """
+    Parses files from given base directories, extracts sequences using a file parser, retrieves labels and classes, and stores the sequences in HDF5 files.
+    Args:
+        *base_dirs (str): One or more base directory paths to search for files.
+        file_parser (Callable[[str], List[int]]): Function that takes a file path and returns a sequence as a list of integers.
+        label_and_class_getter (Callable[[str], Union[None, tuple[int, str]]]): Function that takes a bug name and returns a tuple (label, class) or None if not found.
+        trim_log_ext (bool, optional): Whether to trim the ".log" extension from file names when extracting the bug name. Defaults to True.
+    Side Effects:
+        - Appends parsed sequences to HDF5 files named "{label}_{class_}.h5" in the current working directory.
+    """
     for basedir_path in base_dirs:
         for root, _, files in os.walk(basedir_path):
             for fname in files:
