@@ -93,6 +93,7 @@ def parse_and_store_sequences(
         *base_dirs: str,
         file_parser: Callable[[str], List[int]],
         label_and_class_getter: Callable[str, Union[None, tuple[int, str]]],
+        trim_log_ext: bool = True
     ) -> None:
     for basedir_path in base_dirs:
         for root, _, files in os.walk(basedir_path):
@@ -102,8 +103,8 @@ def parse_and_store_sequences(
                 fpath = os.path.join(root, fname)
 
                 bugname = fname
-                if bugname.startswith("sy_"): bugname = bugname[3:]
-                if bugname.endswith(".log"):  bugname = bugname[:-4]
+                if bugname.startswith("sy_"):                 bugname = bugname[3:]
+                if trim_log_ext and bugname.endswith(".log"): bugname = bugname[:-4]
                 
                 logging.debug(f"Processing file: {fpath}")
                 sequence = file_parser(fpath)
@@ -137,7 +138,8 @@ if __name__ == "__main__":
     parse_and_store_sequences(
         NORMAL_DATA_FOLDER_PATH,
         file_parser=file_parser,
-        label_and_class_getter=label_and_class_getter
+        label_and_class_getter=label_and_class_getter,
+        trim_log_ext=False
     )
 
     assert os.path.exists(ABNORMAL_DATA_FOLDER_PATH), f"Abnormal data folder not found: {ABNORMAL_DATA_FOLDER_PATH}"
