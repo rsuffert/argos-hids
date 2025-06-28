@@ -1,10 +1,11 @@
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
-import numpy as np
 import os
+import h5py
+from typing import List
 
 # =============================
 # Hyperparameters and constants
@@ -94,46 +95,40 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-DONGTING_ABNORMAL_PATH = os.path.join("dataset", "dongting", "syscall_seqs_label_1.npz")
-DONGTING_NORMAL_PATH   = os.path.join("dataset", "dongting", "syscall_seqs_label_0.npz")
+DONGTING_BASE_DIR = os.path.join("..", "dataset", "dongting")
 
-assert os.path.exists(DONGTING_ABNORMAL_PATH), f"Abnormal data file not found at '{DONGTING_ABNORMAL_PATH}'"
-assert os.path.exists(DONGTING_NORMAL_PATH),   f"Normal data file not found at '{DONGTING_NORMAL_PATH}'"
+assert os.path.exists(DONGTING_BASE_DIR), f"DongTing dataset directory not found at '{DONGTING_BASE_DIR}'"
+assert os.path.isdir(DONGTING_BASE_DIR), f"Expected a directory at '{DONGTING_BASE_DIR}' but found a file or non-existent path"
 
-# Load normal and abnormal sequences
-abnormal_arr = np.load(DONGTING_ABNORMAL_PATH, allow_pickle=True)["arr_0"]
-normal_arr   = np.load(DONGTING_NORMAL_PATH,   allow_pickle=True)["arr_0"]
+class H5LazyDataset(torch.utils.data.Dataset):
+    def __init__(self, h5_path: str, label: int):
+        assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
+        self.h5_path = h5_path
+        with h5py.File(h5_path, 'r') as h5f:
+            self.length = len(h5f['sequences'])
+        self.label = label
 
-# Use splits 0, 1, and 3 for training; split 2 for testing
-abnormal_train = abnormal_arr[0] + abnormal_arr[1] + abnormal_arr[3]
-abnormal_test  = abnormal_arr[2]
-normal_train   = normal_arr[0] + normal_arr[1] + normal_arr[3]
-normal_test    = normal_arr[2]
-
-# Build final train and test sets
-train_sequences = normal_train + abnormal_train
-train_labels    = [0]*len(normal_train) + [1]*len(abnormal_train)
-test_sequences  = normal_test + abnormal_test
-test_labels     = [0]*len(normal_test) + [1]*len(abnormal_test)
-
-# Create PyTorch Datasets instances
-class HIDSSyscallsDataset(torch.utils.data.Dataset):
-    def __init__(self, sequences, labels):
-        self.sequences = sequences
-        self.labels = labels
-    
     def __len__(self):
-        return len(self.sequences)
+        return self.length
     
     def __getitem__(self, idx):
-        return self.sequences[idx], self.labels[idx]
+        with h5py.File(self.h5_path, 'r') as h5f:
+            sequence = h5f['sequences'][idx]
+        return sequence, self.label
 
-train_dataset = HIDSSyscallsDataset(train_sequences, train_labels)
-test_dataset  = HIDSSyscallsDataset(test_sequences,  test_labels)
+train_dataset = ConcatDataset([
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1)
+])
+valid_dataset = ConcatDataset([
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-test.h5"), 0),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-test.h5"), 1)
+])
 
-# Initialize DataLoaders
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate)
-test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
+valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 
 # ====================
 # Model instantiation
@@ -157,4 +152,4 @@ trainer = pl.Trainer(
     logger=False,
     enable_checkpointing=False
 )
-trainer.fit(model, train_loader, test_loader)
+trainer.fit(model, train_loader, valid_loader)
