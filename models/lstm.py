@@ -154,10 +154,27 @@ model = LSTMClassifier(
 # Training
 # ====================
 
+checkpoint_callback = pl.callbacks.ModelCheckpoint(
+    monitor="val_f1",
+    mode="max",
+    save_top_k=1,
+    filename="best-val-f1",
+    verbose=True
+)
+
+early_stop_callback = pl.callbacks.EarlyStopping(
+    monitor="val_f1",
+    mode="max",
+    patience=3,
+    min_delta=0.01,
+    verbose=True
+)
+
 trainer = pl.Trainer(
     max_epochs=MAX_EPOCHS,
     accelerator="auto",
     logger=False,
-    enable_checkpointing=False
+    enable_checkpointing=True,
+    callbacks=[checkpoint_callback, early_stop_callback],
 )
 trainer.fit(model, train_loader, valid_loader)
