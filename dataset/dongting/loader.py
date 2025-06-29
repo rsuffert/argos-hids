@@ -6,10 +6,9 @@ workflows.
 
 from typing import Dict, List, Union, Callable
 import os
+import logging
 import numpy as np
 import h5py
-import concurrent.futures
-import logging
 import pandas as pd
 
 SYSCALL_TBL_PATH          = os.getenv('SYSCALL_TBL_PATH',
@@ -41,7 +40,7 @@ def parse_syscall_tbl(path: str) -> Dict[str, int]:
         Dict[str, int]: A dictionary mapping syscall names to their corresponding IDs.
     """
     syscalls_map = {}
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         for line in f:
             if line.startswith('#') or not line.strip():
                 continue
@@ -53,27 +52,28 @@ def parse_syscall_tbl(path: str) -> Dict[str, int]:
             syscalls_map[syscall_name] = syscall_id
     return syscalls_map
 
-def parse_raw_seq_file(path: str, separator: str, syscall_map: Dict[str, int]) -> List[int]:
+def parse_raw_seq_file(path: str, separator: str, syscall_lookup: Dict[str, int]) -> List[int]:
     """
     Parses a raw sequence file containing system call names separated by a specified separator,
-    and maps each system call name to its corresponding integer ID using the provided syscall_map.
+    and maps each system call name to its corresponding integer ID using the provided
+    syscall_lookup.
 
     Args:
         path (str): The path to the raw sequence file.
         separator (str): The string used to separate system call names in the file.
-        syscall_map (Dict[str, int]): A dictionary mapping system call names to integer IDs.
+        syscall_lookup (Dict[str, int]): A dictionary mapping system call names to integer IDs.
 
     Returns:
         List[int]: A list of integer IDs corresponding to the system call names in the file.
 
     Raises:
         FileNotFoundError: If the specified file does not exist.
-        KeyError: If a system call name in the file is not found in syscall_map.
+        KeyError: If a system call name in the file is not found in syscall_lookup.
     """
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         content = f.read().strip()
     return list(map(
-        lambda sysname: int(syscall_map[sysname]),
+        lambda sysname: int(syscall_lookup[sysname]),
         content.split(separator)
     ))
 
@@ -132,11 +132,11 @@ def parse_and_store_sequences(
                 if bugname.startswith("sy_"):                 bugname = bugname[3:]
                 if trim_log_ext and bugname.endswith(".log"): bugname = bugname[:-4]
 
-                logging.debug(f"Processing file: {fpath}")
+                logging.debug("Processing file: %s", fpath)
                 sequence = file_parser(fpath)
                 label, class_ = label_and_class_getter(bugname)
                 if label is None or class_ is None:
-                    logging.warning(f"Label/class not found for '{bugname}' in '{fpath}'.")
+                    logging.warning("Label/class not found for '%s' in '%s'.", bugname, fpath)
                     continue
 
                 append_seq_to_h5(sequence, f"{label}_{class_}.h5")
@@ -145,34 +145,43 @@ if __name__ == "__main__":
     assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file not found: {SYSCALL_TBL_PATH}"
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
-    logging.info(f"Loaded {len(syscall_map)} syscalls from the syscall table.")
+    logging.info("Loaded {%d} syscalls from the syscall table.", len(syscall_map))
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
     baseline_df = pd.read_excel(BASELINE_XLSX_PATH)
     assert not baseline_df.empty, f"Baseline DataFrame is empty. Check: {BASELINE_XLSX_PATH}"
-    logging.info(f"Loaded baseline data with {len(baseline_df)} rows from.")
+    logging.info("Loaded baseline data with {%d} rows from.", len(baseline_df))
 
-    file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
-    def label_and_class_getter(bugname: str) -> Union[None, tuple[int, str]]:
+    def raw_seq_file_closure(path: str) -> List[int]:
+        """
+        Closure function to parse a raw sequence file using the syscall map.
+        """
+        return parse_raw_seq_file(path, "|", syscall_map)
+
+    def label_and_class_getter_closure(bugname: str) -> Union[None, tuple[int, str]]:
+        """
+        Closure function to retrieve the label and class for a given bug name from the
+        baseline DataFrame.
+        """
         row = baseline_df[baseline_df["kcb_bug_name"] == bugname]
         if row.empty: return None, None
         return row["kcb_seq_lables"].values[0], row["kcb_seq_class"].values[0]
 
     assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not found"
     assert os.path.isdir(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not a directory"
-    logging.info(f"Starting to parse sequences from '{NORMAL_DATA_FOLDER_PATH}'")
+    logging.info("Starting to parse sequences from '%s'", NORMAL_DATA_FOLDER_PATH)
     parse_and_store_sequences(
         NORMAL_DATA_FOLDER_PATH,
-        file_parser=file_parser,
-        label_and_class_getter=label_and_class_getter,
+        file_parser=raw_seq_file_closure,
+        label_and_class_getter=label_and_class_getter_closure,
         trim_log_ext=False
     )
 
     assert os.path.exists(ABNORMAL_DATA_FOLDER_PATH), f"{ABNORMAL_DATA_FOLDER_PATH} not found"
     assert os.path.isdir(ABNORMAL_DATA_FOLDER_PATH), f"{ABNORMAL_DATA_FOLDER_PATH} not a directory"
-    logging.info(f"Starting to parse sequences from '{ABNORMAL_DATA_FOLDER_PATH}'")
+    logging.info("Starting to parse sequences from '%s'", ABNORMAL_DATA_FOLDER_PATH)
     parse_and_store_sequences(
         ABNORMAL_DATA_FOLDER_PATH,
-        file_parser=file_parser,
-        label_and_class_getter=label_and_class_getter
+        file_parser=raw_seq_file_closure,
+        label_and_class_getter=label_and_class_getter_closure
     )
