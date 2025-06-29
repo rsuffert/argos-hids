@@ -17,7 +17,7 @@ INPUT_SIZE = 1              # Each element in the sequence is a scalar
 HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
 NUM_LAYERS = 2              # Number of stacked LSTM layers
 NUM_CLASSES = 2             # Output classes: normal or attack
-LEARNING_RATE = 1e-3        # Learning rate for the optimizer
+LEARNING_RATE = 1e-3        # Learning rate for the optimizer (TODO: CURRENTLY UNUSED)
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
 TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
@@ -50,7 +50,7 @@ def collate(batch):
 class LSTMClassifier(pl.LightningModule):
     """LSTM-based classifier using PyTorch Lightning."""
 
-    def __init__(self, input_size, hidden_size, num_layers, num_classes, lr):
+    def __init__(self, input_size, hidden_size, num_layers, num_classes):
         super().__init__()
         self.save_hyperparameters()
 
@@ -67,7 +67,9 @@ class LSTMClassifier(pl.LightningModule):
 
     def forward(self, x, lengths):
         """Forward pass through LSTM and classification layer."""
-        packed_input = pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
+        packed_input = pack_padded_sequence(
+            x, lengths.cpu(), batch_first=True, enforce_sorted=False
+        )
         packed_output, (h_n, c_n) = self.lstm(packed_input)
         out = self.fc(h_n[-1])
         return out
@@ -105,8 +107,8 @@ class LSTMClassifier(pl.LightningModule):
 
 DONGTING_BASE_DIR = os.path.join("..", "..", "dataset", "dongting")
 
-assert os.path.exists(DONGTING_BASE_DIR), f"DongTing dataset directory not found at '{DONGTING_BASE_DIR}'"
-assert os.path.isdir(DONGTING_BASE_DIR), f"Expected a directory at '{DONGTING_BASE_DIR}' but found a file or non-existent path"
+assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
+assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
 
 class H5LazyDataset(torch.utils.data.Dataset):
     def __init__(self, h5_path: str, label: int):
@@ -157,8 +159,7 @@ model = LSTMClassifier(
     input_size=INPUT_SIZE,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYERS,
-    num_classes=NUM_CLASSES,
-    lr=LEARNING_RATE
+    num_classes=NUM_CLASSES
 )
 
 # ====================
