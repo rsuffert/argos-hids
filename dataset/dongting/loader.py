@@ -6,10 +6,14 @@ import concurrent.futures
 import logging
 import pandas as pd
 
-SYSCALL_TBL_PATH          = os.getenv('SYSCALL_TBL_PATH',          os.path.join(os.path.dirname(__file__), 'syscall_64.tbl'))
-NORMAL_DATA_FOLDER_PATH   = os.getenv('NORMAL_DATA_FOLDER_PATH',   os.path.join(os.path.dirname(__file__), 'Normal_data'))
-ABNORMAL_DATA_FOLDER_PATH = os.getenv('ABNORMAL_DATA_FOLDER_PATH', os.path.join(os.path.dirname(__file__), 'Abnormal_data'))
-BASELINE_XLSX_PATH        = os.getenv('BASELINE_XLSX_PATH',        os.path.join(os.path.dirname(__file__), 'Baseline.xlsx'))
+SYSCALL_TBL_PATH          = os.getenv('SYSCALL_TBL_PATH',
+                                      os.path.join(os.path.dirname(__file__), 'syscall_64.tbl'))
+NORMAL_DATA_FOLDER_PATH   = os.getenv('NORMAL_DATA_FOLDER_PATH',
+                                      os.path.join(os.path.dirname(__file__), 'Normal_data'))
+ABNORMAL_DATA_FOLDER_PATH = os.getenv('ABNORMAL_DATA_FOLDER_PATH',
+                                      os.path.join(os.path.dirname(__file__), 'Abnormal_data'))
+BASELINE_XLSX_PATH        = os.getenv('BASELINE_XLSX_PATH',
+                                      os.path.join(os.path.dirname(__file__), 'Baseline.xlsx'))
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -21,7 +25,8 @@ def parse_syscall_tbl(path: str) -> Dict[str, int]:
     Parses a system call table file and returns a mapping from syscall names to their IDs.
 
     Args:
-        path (str): The path to the system call table file. Each line in the file should contain at least three fields:
+        path (str): The path to the system call table file. Each line in the file should contain
+            at least three fields:
             - The first field is the syscall ID (integer).
             - The third field is the syscall name (string).
             Lines starting with '#' or empty lines are ignored.
@@ -96,14 +101,19 @@ def parse_and_store_sequences(
         trim_log_ext: bool = True
     ) -> None:
     """
-    Parses files from given base directories, extracts sequences using a file parser, retrieves labels and classes, and stores the sequences in HDF5 files.
+    Parses files from given base directories, extracts sequences using a file parser, retrieves
+        labels and classes, and stores the sequences in HDF5 files.
     Args:
         *base_dirs (str): One or more base directory paths to search for files.
-        file_parser (Callable[[str], List[int]]): Function that takes a file path and returns a sequence as a list of integers.
-        label_and_class_getter (Callable[[str], Union[None, tuple[int, str]]]): Function that takes a bug name and returns a tuple (label, class) or None if not found.
-        trim_log_ext (bool, optional): Whether to trim the ".log" extension from file names when extracting the bug name. Defaults to True.
+        file_parser (Callable[[str], List[int]]): Function that takes a file path and returns
+            a sequence as a list of integers.
+        label_and_class_getter (Callable[[str], Union[None, tuple[int, str]]]): Function that
+            takes a bug name and returns a tuple (label, class) or None if not found.
+        trim_log_ext (bool, optional): Whether to trim the ".log" extension from file names when
+            extracting the bug name. Defaults to True.
     Side Effects:
-        - Appends parsed sequences to HDF5 files named "{label}_{class_}.h5" in the current working directory.
+        - Appends parsed sequences to HDF5 files named "{label}_{class_}.h5" in the current
+            working directory.
     """
     for basedir_path in base_dirs:
         for root, _, files in os.walk(basedir_path):
@@ -120,7 +130,7 @@ def parse_and_store_sequences(
                 sequence = file_parser(fpath)
                 label, class_ = label_and_class_getter(bugname)
                 if label is None or class_ is None:
-                    logging.warning(f"Label or class not found for bug name '{bugname}' in file '{fpath}'. Skipping...")
+                    logging.warning(f"Label/class not found for '{bugname}' in '{fpath}'.")
                     continue
                 
                 append_seq_to_h5(sequence, f"{label}_{class_}.h5")
@@ -133,7 +143,7 @@ if __name__ == "__main__":
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
     baseline_df = pd.read_excel(BASELINE_XLSX_PATH)
-    assert not baseline_df.empty, f"Baseline DataFrame is empty. Check the file: {BASELINE_XLSX_PATH}"
+    assert not baseline_df.empty, f"Baseline DataFrame is empty. Check: {BASELINE_XLSX_PATH}"
     logging.info(f"Loaded baseline data with {len(baseline_df)} rows from.")
 
     file_parser = lambda path: parse_raw_seq_file(path, "|", syscall_map)
@@ -142,8 +152,8 @@ if __name__ == "__main__":
         if row.empty: return None, None
         return row["kcb_seq_lables"].values[0], row["kcb_seq_class"].values[0]
 
-    assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"Normal data folder not found: {NORMAL_DATA_FOLDER_PATH}"
-    assert os.path.isdir(NORMAL_DATA_FOLDER_PATH), f"Path is not a directory: {NORMAL_DATA_FOLDER_PATH}"
+    assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not found"
+    assert os.path.isdir(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not a directory"
     logging.info(f"Starting to parse sequences from '{NORMAL_DATA_FOLDER_PATH}'")
     parse_and_store_sequences(
         NORMAL_DATA_FOLDER_PATH,
@@ -152,8 +162,8 @@ if __name__ == "__main__":
         trim_log_ext=False
     )
 
-    assert os.path.exists(ABNORMAL_DATA_FOLDER_PATH), f"Abnormal data folder not found: {ABNORMAL_DATA_FOLDER_PATH}"
-    assert os.path.isdir(ABNORMAL_DATA_FOLDER_PATH), f"Path is not a directory: {ABNORMAL_DATA_FOLDER_PATH}"
+    assert os.path.exists(ABNORMAL_DATA_FOLDER_PATH), f"{ABNORMAL_DATA_FOLDER_PATH} not found"
+    assert os.path.isdir(ABNORMAL_DATA_FOLDER_PATH), f"{ABNORMAL_DATA_FOLDER_PATH} not a directory"
     logging.info(f"Starting to parse sequences from '{ABNORMAL_DATA_FOLDER_PATH}'")
     parse_and_store_sequences(
         ABNORMAL_DATA_FOLDER_PATH,
