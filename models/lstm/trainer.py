@@ -131,8 +131,6 @@ train_dataset = ConcatDataset([
 valid_dataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-test.h5"), 0),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-test.h5"), 1)
 ])
 
 num_workers = (os.cpu_count() // 2) if os.cpu_count() > 1 else 1
