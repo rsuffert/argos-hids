@@ -73,3 +73,45 @@ jobs:
             exit 1
           fi
           echo "✅ Complexity OK"
+  
+  requirements-checks:
+    name: Requirements Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install pipreqs
+        run: pip install pipreqs
+
+      - name: Check requirements.txt files
+        run: |
+          set -e
+
+          for dir in $(find . -type f -name "*.py" -exec dirname {} \; | sort -u); do
+            if [ ! -f "$dir/requirements.txt" ]; then
+                echo "❌ Python module $dir does not have a requirements.txt file."
+                echo "Python source code should be organized in modules (directories), each with its own requirements.txt file."
+                exit 1
+            fi
+
+            pipreqs "$dir" --force --savepath "$dir/pipreqs-requirements.txt"
+            sort "$dir/pipreqs-requirements.txt" > "$dir/pipreqs-requirements-sorted.txt"
+            sed -i 's/==.*//' "$dir/pipreqs-requirements-sorted.txt"
+
+            sort "$dir/requirements.txt" > "$dir/requirements-sorted.txt"
+            sed -i 's/==.*//' "$dir/requirements-sorted.txt"
+
+            if ! diff -u "$dir/requirements-sorted.txt" "$dir/pipreqs-requirements-sorted.txt"; then
+              echo "❌ $dir/requirements.txt is not up-to-date with the imported environment."
+              echo "Please run 'pipreqs . --force --debug' in the module directory to update it."
+              exit 1
+            fi
+            
+            echo "✅ $dir/requirements.txt is up-to-date with the imported environment."
+          done
