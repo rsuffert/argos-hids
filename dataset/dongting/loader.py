@@ -119,7 +119,7 @@ def parse_and_store_sequences(
                 logging.debug(f"Processing file: {fpath}")
                 sequence = file_parser(fpath)
                 label, class_ = label_and_class_getter(bugname)
-                if not label or not class_:
+                if label is None or class_ is None:
                     logging.warning(f"Label or class not found for bug name '{bugname}' in file '{fpath}'. Skipping...")
                     continue
                 
