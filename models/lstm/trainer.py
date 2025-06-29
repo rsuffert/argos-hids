@@ -1,11 +1,15 @@
+"""
+Module for training an LSTM intrusion detection model on the DongTing dataset using
+PyTorch Lightning.
+"""
+
+import os
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
-import os
 import h5py
-from typing import List
 
 torch.backends.cudnn.enabled = False
 
@@ -90,11 +94,12 @@ class LSTMClassifier(pl.LightningModule):
 
         return loss
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, _batch_idx):
         """Training step for one batch."""
         return self.shared_step(batch, step_type='train')
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, _batch_idx):
+        """Validation step for one batch."""
         self.shared_step(batch, step_type='val')
 
     def configure_optimizers(self):
@@ -111,6 +116,7 @@ assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
 assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
 
 class H5LazyDataset(torch.utils.data.Dataset):
+    """Lazy dataset for reading sequences from an HDF5 file."""
     def __init__(self, h5_path: str, label: int):
         assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
         self.h5_path = h5_path
