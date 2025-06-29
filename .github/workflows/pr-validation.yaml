@@ -7,8 +7,8 @@ on:
       - main
 
 jobs:
-  validate-pr:
-    name: Validate Pull Request
+  pr-structure-validation:
+    name: Validate PR Structure
     runs-on: ubuntu-latest
     steps:
       - name: Check PR Title
@@ -42,3 +42,38 @@ jobs:
             exit 1
           fi
           echo "✅ PR description is valid."
+        
+  static-code-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pylint flake8 radon
+      
+      - name: Code smells check
+        run: |
+          pylint $(git ls-files '*.py')
+      
+      - name: Code style check
+        run: |
+          flake8 $(git ls-files '*.py')
+      
+      - name: Code complexity check
+        run: |
+          radon cc -a $(git ls-files '*.py') > cc_report.txt
+          cat cc_report.txt
+          if grep -qE ' - [CDEF]$' cc_report.txt; then
+            echo "❌ Complexity too high!"
+            exit 1
+          fi
+          echo "✅ Complexity OK"
