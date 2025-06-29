@@ -70,7 +70,7 @@ class LSTMClassifier(pl.LightningModule):
         packed_input = pack_padded_sequence(
             x, lengths.cpu(), batch_first=True, enforce_sorted=False
         )
-        packed_output, (h_n, c_n) = self.lstm(packed_input)
+        _, (h_n, _) = self.lstm(packed_input)
         out = self.fc(h_n[-1])
         return out
 
@@ -84,9 +84,9 @@ class LSTMClassifier(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         acc = self.accuracy(preds, labels)
         f1 = self.f1(preds, labels)
-        self.log(f'{step_type}_loss', loss, prog_bar=(step_type == 'val'))
-        self.log(f'{step_type}_acc', acc, prog_bar=(step_type == 'val'))
-        self.log(f'{step_type}_f1', f1, prog_bar=(step_type == 'val'))
+        self.log(f'{step_type}_loss', loss, prog_bar=step_type == 'val')
+        self.log(f'{step_type}_acc', acc, prog_bar=step_type == 'val')
+        self.log(f'{step_type}_f1', f1, prog_bar=step_type == 'val')
 
         return loss
 
@@ -120,7 +120,7 @@ class H5LazyDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return self.length
-    
+
     def __getitem__(self, idx):
         with h5py.File(self.h5_path, 'r') as h5f:
             sequence = h5f['sequences'][idx]
