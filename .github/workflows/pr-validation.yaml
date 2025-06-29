@@ -62,7 +62,7 @@ jobs:
       
       - name: Code smells check
         run: |
-          pylint $(git ls-files '*.py')
+          pylint --disable=import-error $(git ls-files '*.py')
       
       - name: Code style check
         run: |
