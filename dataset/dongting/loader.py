@@ -124,13 +124,16 @@ def parse_and_store_sequences(
     for basedir_path in base_dirs:
         for root, _, files in os.walk(basedir_path):
             for fname in files:
-                if fname.endswith(".h5"): continue # Skip the H5 files themselves
+                if fname.endswith(".h5"):
+                    continue # Skip the H5 files themselves
 
                 fpath = os.path.join(root, fname)
 
                 bugname = fname
-                if bugname.startswith("sy_"):                 bugname = bugname[3:]
-                if trim_log_ext and bugname.endswith(".log"): bugname = bugname[:-4]
+                if bugname.startswith("sy_"):
+                    bugname = bugname[3:]
+                if trim_log_ext and bugname.endswith(".log"):
+                    bugname = bugname[:-4]
 
                 logging.debug("Processing file: %s", fpath)
                 sequence = file_parser(fpath)
@@ -164,7 +167,8 @@ if __name__ == "__main__":
         baseline DataFrame.
         """
         row = baseline_df[baseline_df["kcb_bug_name"] == bugname]
-        if row.empty: return None, None
+        if row.empty:
+            return None, None
         return row["kcb_seq_lables"].values[0], row["kcb_seq_class"].values[0]
 
     assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not found"
