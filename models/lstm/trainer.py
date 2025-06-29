@@ -135,8 +135,21 @@ valid_dataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-test.h5"), 1)
 ])
 
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate)
-valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
+num_workers = (os.cpu_count() // 2) if os.cpu_count() > 1 else 1
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    collate_fn=collate,
+    num_workers=num_workers
+)
+valid_loader = DataLoader(
+    valid_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=False,
+    collate_fn=collate,
+    num_workers=num_workers
+)
 
 # ====================
 # Model instantiation
