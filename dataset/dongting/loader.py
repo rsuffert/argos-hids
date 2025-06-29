@@ -1,3 +1,9 @@
+"""
+Module for parsing system call sequences from DongTing dataset raw files and storing them
+in HDF5 compressed and pre-processed format for seamless integration with machine learning
+workflows.
+"""
+
 from typing import Dict, List, Union, Callable
 import os
 import numpy as np
@@ -119,20 +125,20 @@ def parse_and_store_sequences(
         for root, _, files in os.walk(basedir_path):
             for fname in files:
                 if fname.endswith(".h5"): continue # Skip the H5 files themselves
-                
+
                 fpath = os.path.join(root, fname)
 
                 bugname = fname
                 if bugname.startswith("sy_"):                 bugname = bugname[3:]
                 if trim_log_ext and bugname.endswith(".log"): bugname = bugname[:-4]
-                
+
                 logging.debug(f"Processing file: {fpath}")
                 sequence = file_parser(fpath)
                 label, class_ = label_and_class_getter(bugname)
                 if label is None or class_ is None:
                     logging.warning(f"Label/class not found for '{bugname}' in '{fpath}'.")
                     continue
-                
+
                 append_seq_to_h5(sequence, f"{label}_{class_}.h5")
 
 if __name__ == "__main__":
