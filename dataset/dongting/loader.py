@@ -148,12 +148,12 @@ if __name__ == "__main__":
     assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file not found: {SYSCALL_TBL_PATH}"
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
-    logging.info("Loaded {%d} syscalls from the syscall table.", len(syscall_map))
+    logging.info("Loaded %d syscalls from the syscall table.", len(syscall_map))
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
     baseline_df = pd.read_excel(BASELINE_XLSX_PATH)
     assert not baseline_df.empty, f"Baseline DataFrame is empty. Check: {BASELINE_XLSX_PATH}"
-    logging.info("Loaded baseline data with {%d} rows from.", len(baseline_df))
+    logging.info("Loaded baseline data with %d rows from.", len(baseline_df))
 
     def raw_seq_file_closure(path: str) -> List[int]:
         """
