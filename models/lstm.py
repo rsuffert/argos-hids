@@ -7,6 +7,8 @@ import os
 import h5py
 from typing import List
 
+torch.backends.cudnn.enabled = False
+
 # =============================
 # Hyperparameters and constants
 # =============================
@@ -16,9 +18,10 @@ HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
 NUM_LAYERS = 2              # Number of stacked LSTM layers
 NUM_CLASSES = 2             # Output classes: normal or attack
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
-BATCH_SIZE = 128            # Batch size for DataLoader
-MAX_EPOCHS = 50              # Number of training epochs
+BATCH_SIZE = 64             # Batch size for DataLoader
+MAX_EPOCHS = 10             # Number of training epochs
 TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
+MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 
 # ====================
 # Collate function
@@ -28,8 +31,13 @@ def collate(batch):
     """Custom collate function to pad sequences and prepare batches."""
     sequences, labels = zip(*batch)
     # PyTorch expects tensors to be floating-point, even though they are scalars in our case
-    sequences = [torch.tensor(seq, dtype=torch.float32) for seq in sequences]
-    lengths = torch.tensor([len(seq) for seq in sequences], dtype=torch.long)
+    sequences = [torch.tensor(seq[:MAX_SEQ_LEN], dtype=torch.float32)
+                 for seq in sequences]
+    lengths = torch.tensor(
+        [min(len(seq), MAX_SEQ_LEN)
+         for seq in sequences],
+        dtype=torch.long
+    )
     # padding sequences with zeros to the maximum length in the batch
     padded_sequences = pad_sequence(sequences, batch_first=True)
     labels = torch.tensor(labels, dtype=torch.long)
