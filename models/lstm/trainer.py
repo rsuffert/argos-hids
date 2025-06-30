@@ -4,6 +4,7 @@ PyTorch Lightning.
 """
 
 import os
+from dataclasses import dataclass
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
@@ -51,21 +52,30 @@ def collate(batch):
 # Model definition
 # ====================
 
+@dataclass
+class LSTMConfig:
+    """Configuration for the LSTM classifier."""
+    input_size: int
+    hidden_size: int
+    num_layers: int
+    num_classes: int
+    lr: float
+
 class LSTMClassifier(pl.LightningModule):
     """LSTM-based classifier using PyTorch Lightning."""
 
-    def __init__(self, input_size, hidden_size, num_layers, num_classes, lr):
+    def __init__(self, config: LSTMConfig):
+        """Initialize the LSTM classifier with the given configuration."""
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(config.__dict__)
 
-        self.lr = lr
         self.lstm = torch.nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
+            input_size=config.input_size,
+            hidden_size=config.hidden_size,
+            num_layers=config.num_layers,
             batch_first=True
         )
-        self.fc = torch.nn.Linear(hidden_size, num_classes)
+        self.fc = torch.nn.Linear(config.hidden_size, config.num_classes)
         self.criterion = torch.nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task='binary')
         self.f1 = F1Score(task='binary')
@@ -162,13 +172,13 @@ valid_loader = DataLoader(
 # Model instantiation
 # ====================
 
-model = LSTMClassifier(
+model = LSTMClassifier(LSTMConfig(
     input_size=INPUT_SIZE,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYERS,
     num_classes=NUM_CLASSES,
     lr=LEARNING_RATE
-)
+))
 
 # ====================
 # Training
