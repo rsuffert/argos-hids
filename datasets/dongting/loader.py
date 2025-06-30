@@ -103,7 +103,7 @@ def append_seq_to_h5(sequence: List[int], h5_path: str) -> None:
 def parse_and_store_sequences(
         *base_dirs: str,
         file_parser: Callable[[str], List[int]],
-        label_and_class_getter: Callable[str, Union[None, tuple[int, str]]],
+        label_and_class_getter: Callable[[str], Union[None, tuple[int, str]]],
         trim_log_ext: bool = True
     ) -> None:
     """
