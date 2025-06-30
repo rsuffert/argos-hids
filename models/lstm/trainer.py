@@ -21,7 +21,7 @@ INPUT_SIZE = 1              # Each element in the sequence is a scalar
 HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
 NUM_LAYERS = 2              # Number of stacked LSTM layers
 NUM_CLASSES = 2             # Output classes: normal or attack
-LEARNING_RATE = 1e-3        # Learning rate for the optimizer (TODO: CURRENTLY UNUSED)
+LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
 TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
@@ -54,10 +54,11 @@ def collate(batch):
 class LSTMClassifier(pl.LightningModule):
     """LSTM-based classifier using PyTorch Lightning."""
 
-    def __init__(self, input_size, hidden_size, num_layers, num_classes):
+    def __init__(self, input_size, hidden_size, num_layers, num_classes, lr):
         super().__init__()
         self.save_hyperparameters()
 
+        self.lr = lr
         self.lstm = torch.nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
@@ -165,7 +166,8 @@ model = LSTMClassifier(
     input_size=INPUT_SIZE,
     hidden_size=HIDDEN_SIZE,
     num_layers=NUM_LAYERS,
-    num_classes=NUM_CLASSES
+    num_classes=NUM_CLASSES,
+    lr=LEARNING_RATE
 )
 
 # ====================
