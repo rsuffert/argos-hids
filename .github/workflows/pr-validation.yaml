@@ -94,22 +94,31 @@ jobs:
           set -e
 
           for dir in $(find . -type f -name "*.py" -exec dirname {} \; | sort -u); do
+            pipreqs "$dir" --force --savepath "$dir/pipreqs-requirements.txt"
+
+            # Check if pipreqs generated an empty requirements file. In such case,
+            # the Python module only has standard library dependencies and doesn't
+            # need a requirements.txt file.
+            if ! grep -q '[^[:space:]]' "$dir/pipreqs-requirements.txt"; then
+              echo "ℹ️  $dir has no external dependencies, skipping requirements.txt check."
+              continue
+            fi
+
+            sort "$dir/pipreqs-requirements.txt" > "$dir/pipreqs-requirements-sorted.txt"
+            sed -i 's/==.*//' "$dir/pipreqs-requirements-sorted.txt"
+
             if [ ! -f "$dir/requirements.txt" ]; then
                 echo "❌ Python module $dir does not have a requirements.txt file."
                 echo "Python source code should be organized in modules (directories), each with its own requirements.txt file."
                 exit 1
             fi
 
-            pipreqs "$dir" --force --savepath "$dir/pipreqs-requirements.txt"
-            sort "$dir/pipreqs-requirements.txt" > "$dir/pipreqs-requirements-sorted.txt"
-            sed -i 's/==.*//' "$dir/pipreqs-requirements-sorted.txt"
-
             sort "$dir/requirements.txt" > "$dir/requirements-sorted.txt"
             sed -i 's/==.*//' "$dir/requirements-sorted.txt"
 
             if ! diff -u "$dir/requirements-sorted.txt" "$dir/pipreqs-requirements-sorted.txt"; then
               echo "❌ $dir/requirements.txt is not up-to-date with the imported environment."
-              echo "Please run 'pipreqs . --force --debug' in the module directory to update it."
+              echo "Please run 'pipreqs . --force' in the module directory to update it."
               exit 1
             fi
             
