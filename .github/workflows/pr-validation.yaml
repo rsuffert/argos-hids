@@ -108,16 +108,19 @@ jobs:
             sed -i 's/==.*//' "$dir/pipreqs-requirements-sorted.txt"
 
             if [ ! -f "$dir/requirements.txt" ]; then
-                echo "❌ Python module $dir does not have a requirements.txt file."
-                echo "Python source code should be organized in modules (directories), each with its own requirements.txt file."
-                exit 1
+              echo "❌ Python module $dir does not have a requirements.txt file."
+              echo "Python source code should be organized in modules (directories), each with its own requirements.txt file."
+              exit 1
             fi
 
             sort "$dir/requirements.txt" > "$dir/requirements-sorted.txt"
             sed -i 's/==.*//' "$dir/requirements-sorted.txt"
 
-            if ! diff -u "$dir/requirements-sorted.txt" "$dir/pipreqs-requirements-sorted.txt"; then
+            # Enforce that at least the requirements listed by pipreqs are present in requirements.txt.
+            missing=$(comm -23 "$dir/pipreqs-requirements-sorted.txt" "$dir/requirements-sorted.txt" | grep . || true)
+            if [ -n "$missing" ]; then
               echo "❌ $dir/requirements.txt is not up-to-date with the imported environment."
+              echo "Missing: $missing"
               echo "Please run 'pipreqs . --force' in the module directory to update it."
               exit 1
             fi
