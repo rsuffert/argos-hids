@@ -156,9 +156,7 @@ if __name__ == "__main__":
     logging.info("Loaded baseline data with %d rows from.", len(baseline_df))
 
     def raw_seq_file_closure(path: str) -> List[int]:
-        """
-        Closure function to parse a raw sequence file using the syscall map.
-        """
+        """Closure function to parse a raw sequence file using the syscall map."""
         return parse_raw_seq_file(path, "|", syscall_map)
 
     def label_and_class_getter_closure(bugname: str) -> Union[None, tuple[int, str]]:

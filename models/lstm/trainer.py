@@ -128,7 +128,23 @@ assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
+    
     def __init__(self, h5_path: str, label: int):
+        """
+        Initializes the object with the given HDF5 file path and label.
+
+        Args:
+            h5_path (str): Path to the HDF5 file containing the sequences.
+            label (int): Label associated with the data.
+
+        Raises:
+            AssertionError: If the specified HDF5 file does not exist.
+
+        Attributes:
+            h5_path (str): Path to the HDF5 file.
+            length (int): Number of sequences in the HDF5 file.
+            label (int): Label associated with the data.
+        """
         assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
         self.h5_path = h5_path
         with h5py.File(h5_path, 'r') as h5f:
