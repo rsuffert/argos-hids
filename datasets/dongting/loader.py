@@ -4,7 +4,7 @@ in HDF5 compressed and pre-processed format for seamless integration with machin
 workflows.
 """
 
-from typing import Dict, List, Union, Callable
+from typing import Dict, List, Union, Callable, Tuple
 import os
 import logging
 import numpy as np
@@ -103,7 +103,7 @@ def append_seq_to_h5(sequence: List[int], h5_path: str) -> None:
 def parse_and_store_sequences(
         *base_dirs: str,
         file_parser: Callable[[str], List[int]],
-        label_and_class_getter: Callable[[str], Union[None, tuple[int, str]]],
+        label_and_class_getter: Callable[[str], Union[Tuple[None, None], Tuple[int, str]]],
         trim_log_ext: bool = True
     ) -> None:
     """
@@ -113,8 +113,8 @@ def parse_and_store_sequences(
         *base_dirs (str): One or more base directory paths to search for files.
         file_parser (Callable[[str], List[int]]): Function that takes a file path and returns
             a sequence as a list of integers.
-        label_and_class_getter (Callable[[str], Union[None, tuple[int, str]]]): Function that
-            takes a bug name and returns a tuple (label, class) or None if not found.
+        label_and_class_getter (Callable[[str], Union[None, Tuple[int, str]]]): Function that
+            takes a bug name and returns a Tuple (label, class) or None if not found.
         trim_log_ext (bool, optional): Whether to trim the ".log" extension from file names when
             extracting the bug name. Defaults to True.
     Side Effects:
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         """Closure function to parse a raw sequence file using the syscall map."""
         return parse_raw_seq_file(path, "|", syscall_map)
 
-    def label_and_class_getter_closure(bugname: str) -> Union[None, tuple[int, str]]:
+    def label_and_class_getter_closure(bugname: str) -> Union[Tuple[None, None], Tuple[int, str]]:
         """
         Closure function to retrieve the label and class for a given bug name from the
         baseline DataFrame.

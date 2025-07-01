@@ -58,12 +58,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pylint radon
+          pip install ruff mypy radon
       
       - name: Code smells/style check
         run: |
-          pylint --disable=import-error $(git ls-files '*.py')
-      
+          ruff check .
+
+      - name: Type checking
+        run: |
+          mypy --ignore-missing-imports $(git ls-files '*.py')
+
       - name: Code complexity check
         run: |
           radon cc -a $(git ls-files '*.py') > cc_report.txt
