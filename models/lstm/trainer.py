@@ -37,7 +37,7 @@ MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 
 def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Custom collate function to pad sequences and prepare batches."""
-    sequences, labels = zip(*batch)
+    sequences, labels = map(list, zip(*batch))
     # PyTorch expects tensors to be floating-point, even though they are scalars in our case
     sequences = [torch.as_tensor(seq[:MAX_SEQ_LEN], dtype=torch.float32)
                  for seq in sequences]
@@ -48,8 +48,8 @@ def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor
     )
     # padding sequences with zeros to the maximum length in the batch
     padded_sequences = pad_sequence(sequences, batch_first=True)
-    labels = torch.as_tensor(labels, dtype=torch.long)
-    return padded_sequences, lengths, labels
+    labels_ = torch.as_tensor(labels, dtype=torch.long)
+    return padded_sequences, lengths, labels_
 
 # ====================
 # Model definition
