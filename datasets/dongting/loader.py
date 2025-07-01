@@ -11,14 +11,14 @@ import numpy as np
 import h5py
 import pandas as pd
 
-SYSCALL_TBL_PATH          = os.getenv('SYSCALL_TBL_PATH',
-                                      os.path.join(os.path.dirname(__file__), 'syscall_64.tbl'))
-NORMAL_DATA_FOLDER_PATH   = os.getenv('NORMAL_DATA_FOLDER_PATH',
-                                      os.path.join(os.path.dirname(__file__), 'Normal_data'))
-ABNORMAL_DATA_FOLDER_PATH = os.getenv('ABNORMAL_DATA_FOLDER_PATH',
-                                      os.path.join(os.path.dirname(__file__), 'Abnormal_data'))
-BASELINE_XLSX_PATH        = os.getenv('BASELINE_XLSX_PATH',
-                                      os.path.join(os.path.dirname(__file__), 'Baseline.xlsx'))
+SYSCALL_TBL_PATH          = os.getenv("SYSCALL_TBL_PATH",
+                                      os.path.join(os.path.dirname(__file__), "syscall_64.tbl"))
+NORMAL_DATA_FOLDER_PATH   = os.getenv("NORMAL_DATA_FOLDER_PATH",
+                                      os.path.join(os.path.dirname(__file__), "Normal_data"))
+ABNORMAL_DATA_FOLDER_PATH = os.getenv("ABNORMAL_DATA_FOLDER_PATH",
+                                      os.path.join(os.path.dirname(__file__), "Abnormal_data"))
+BASELINE_XLSX_PATH        = os.getenv("BASELINE_XLSX_PATH",
+                                      os.path.join(os.path.dirname(__file__), "Baseline.xlsx"))
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -34,15 +34,15 @@ def parse_syscall_tbl(path: str) -> Dict[str, int]:
             at least three fields:
             - The first field is the syscall ID (integer).
             - The third field is the syscall name (string).
-            Lines starting with '#' or empty lines are ignored.
+            Lines starting with "#" or empty lines are ignored.
 
     Returns:
         Dict[str, int]: A dictionary mapping syscall names to their corresponding IDs.
     """
     syscalls_map = {}
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            if line.startswith('#') or not line.strip():
+            if line.startswith("#") or not line.strip():
                 continue
             parts = line.split()
             if len(parts) < 3:
@@ -70,7 +70,7 @@ def parse_raw_seq_file(path: str, separator: str, syscall_lookup: Dict[str, int]
         FileNotFoundError: If the specified file does not exist.
         KeyError: If a system call name in the file is not found in syscall_lookup.
     """
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         content = f.read().strip()
     return list(map(
         lambda sysname: int(syscall_lookup[sysname]),
@@ -89,11 +89,11 @@ def append_seq_to_h5(sequence: List[int], h5_path: str) -> None:
         h5_path (str): Path to the HDF5 file.
     """
     arr = np.array(sequence, dtype=np.int16)
-    with h5py.File(h5_path, 'a') as h5f:
+    with h5py.File(h5_path, "a") as h5f:
         if "sequences" not in h5f:
             h5f.create_dataset("sequences",
                 shape=(0,), maxshape=(None,),
-                dtype=h5py.special_dtype(vlen=np.dtype('int16')),
+                dtype=h5py.special_dtype(vlen=np.dtype("int16")),
                 compression="gzip"
             )
         dset = h5f["sequences"]

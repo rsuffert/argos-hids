@@ -77,8 +77,8 @@ class LSTMClassifier(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(config.hidden_size, config.num_classes)
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.accuracy = Accuracy(task='binary')
-        self.f1 = F1Score(task='binary')
+        self.accuracy = Accuracy(task="binary")
+        self.f1 = F1Score(task="binary")
 
     def forward(self, x, lengths):
         """Forward pass through LSTM and classification layer."""
@@ -86,8 +86,7 @@ class LSTMClassifier(pl.LightningModule):
             x, lengths.cpu(), batch_first=True, enforce_sorted=False
         )
         _, (h_n, _) = self.lstm(packed_input)
-        out = self.fc(h_n[-1])
-        return out
+        return self.fc(h_n[-1])
 
     def shared_step(self, batch, step_type):
         """Shared logic for training and validation steps."""
@@ -99,19 +98,19 @@ class LSTMClassifier(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         acc = self.accuracy(preds, labels)
         f1 = self.f1(preds, labels)
-        self.log(f'{step_type}_loss', loss, prog_bar=step_type == 'val')
-        self.log(f'{step_type}_acc', acc, prog_bar=step_type == 'val')
-        self.log(f'{step_type}_f1', f1, prog_bar=step_type == 'val')
+        self.log(f"{step_type}_loss", loss, prog_bar=step_type == "val")
+        self.log(f"{step_type}_acc", acc, prog_bar=step_type == "val")
+        self.log(f"{step_type}_f1", f1, prog_bar=step_type == "val")
 
         return loss
 
     def training_step(self, batch, _batch_idx):
         """Training step for one batch."""
-        return self.shared_step(batch, step_type='train')
+        return self.shared_step(batch, step_type="train")
 
     def validation_step(self, batch, _batch_idx):
         """Validation step for one batch."""
-        self.shared_step(batch, step_type='val')
+        self.shared_step(batch, step_type="val")
 
     def configure_optimizers(self):
         """Configure optimizer."""
@@ -128,7 +127,7 @@ assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
-    
+
     def __init__(self, h5_path: str, label: int):
         """
         Initializes the object with the given HDF5 file path and label.
@@ -147,16 +146,16 @@ class H5LazyDataset(torch.utils.data.Dataset):
         """
         assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
         self.h5_path = h5_path
-        with h5py.File(h5_path, 'r') as h5f:
-            self.length = len(h5f['sequences'])
+        with h5py.File(h5_path, "r") as h5f:
+            self.length = len(h5f["sequences"])
         self.label = label
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-        with h5py.File(self.h5_path, 'r') as h5f:
-            sequence = h5f['sequences'][idx]
+        with h5py.File(self.h5_path, "r") as h5f:
+            sequence = h5f["sequences"][idx]
         return sequence, self.label
 
 train_dataset = ConcatDataset([
