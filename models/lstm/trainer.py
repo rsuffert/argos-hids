@@ -211,7 +211,7 @@ early_stop_callback = pl.callbacks.EarlyStopping(
     monitor="val_f1",
     mode="max",
     patience=3,
-    min_delta=0.01,
+    min_delta=0.001,
     verbose=True
 )
 
