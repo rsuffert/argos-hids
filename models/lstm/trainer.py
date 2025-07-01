@@ -4,13 +4,16 @@ PyTorch Lightning.
 """
 
 import os
+from typing import Tuple, List
 from dataclasses import dataclass
 import pytorch_lightning as pl
 import torch
+from torch import Tensor
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
 import h5py
+import numpy as np
 
 torch.backends.cudnn.enabled = False
 
@@ -32,20 +35,20 @@ MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 # Collate function
 # ====================
 
-def collate(batch):
+def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Custom collate function to pad sequences and prepare batches."""
     sequences, labels = zip(*batch)
     # PyTorch expects tensors to be floating-point, even though they are scalars in our case
-    sequences = [torch.tensor(seq[:MAX_SEQ_LEN], dtype=torch.float32)
+    sequences = [torch.as_tensor(seq[:MAX_SEQ_LEN], dtype=torch.float32)
                  for seq in sequences]
-    lengths = torch.tensor(
+    lengths = torch.as_tensor(
         [min(len(seq), MAX_SEQ_LEN)
          for seq in sequences],
         dtype=torch.long
     )
     # padding sequences with zeros to the maximum length in the batch
     padded_sequences = pad_sequence(sequences, batch_first=True)
-    labels = torch.tensor(labels, dtype=torch.long)
+    labels = torch.as_tensor(labels, dtype=torch.long)
     return padded_sequences, lengths, labels
 
 # ====================
@@ -64,7 +67,7 @@ class LSTMConfig:
 class LSTMClassifier(pl.LightningModule):
     """LSTM-based classifier using PyTorch Lightning."""
 
-    def __init__(self, config: LSTMConfig):
+    def __init__(self, config: LSTMConfig) -> None:
         """Initialize the LSTM classifier with the given configuration."""
         super().__init__()
         self.save_hyperparameters(config.__dict__)
@@ -80,7 +83,7 @@ class LSTMClassifier(pl.LightningModule):
         self.accuracy = Accuracy(task="binary")
         self.f1 = F1Score(task="binary")
 
-    def forward(self, x, lengths):
+    def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through LSTM and classification layer."""
         packed_input = pack_padded_sequence(
             x, lengths.cpu(), batch_first=True, enforce_sorted=False
@@ -88,7 +91,7 @@ class LSTMClassifier(pl.LightningModule):
         _, (h_n, _) = self.lstm(packed_input)
         return self.fc(h_n[-1])
 
-    def shared_step(self, batch, step_type):
+    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor], step_type: str) -> Tensor:
         """Shared logic for training and validation steps."""
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
@@ -104,15 +107,15 @@ class LSTMClassifier(pl.LightningModule):
 
         return loss
 
-    def training_step(self, batch, _batch_idx):
+    def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
         """Training step for one batch."""
         return self.shared_step(batch, step_type="train")
 
-    def validation_step(self, batch, _batch_idx):
+    def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
         self.shared_step(batch, step_type="val")
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
@@ -128,7 +131,7 @@ assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
 
-    def __init__(self, h5_path: str, label: int):
+    def __init__(self, h5_path: str, label: int) -> None:
         """
         Initializes the object with the given HDF5 file path and label.
 
@@ -150,10 +153,10 @@ class H5LazyDataset(torch.utils.data.Dataset):
             self.length = len(h5f["sequences"])
         self.label = label
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple[np.ndarray, int]:
         with h5py.File(self.h5_path, "r") as h5f:
             sequence = h5f["sequences"][idx]
         return sequence, self.label
