@@ -1,0 +1,26 @@
+[tool.ruff]
+lint.select = [
+    "E",    # Enforce pycodestyle errors (style, whitespace)
+    "F",    # Enforce pyflakes checks (unused imports, undefined names)
+    "B",    # Enforce bugbear checks (code smells)
+    "D",    # Enforce pydocstyle checks (docstrings)
+    "N",    # Enforce pep8-naming checks (naming conventions)
+    "C90",  # Enforce mccabe checks (complexity/nesting)
+    #"ANN",  # Enforce type annotation checks
+    "Q",    # Enforce flake8-quotes checks (quote consistency)
+    "PIE",  # Enforce flake8-pie checks (misc best practices)
+    "RET",  # Enforce flake8-return checks (return statement best practices)
+    "SIM",  # Enforce flake8-simplify checks (code simplification)
+    "TID",  # Enforce flake8-tidy-imports checks (import conventions)
+]
+lint.ignore = [
+    "D105",  # Ignore missing docstring in magic method (pydocstyle)
+    "D203",  # Ignore requirement for 1 blank line before class docstring (pydocstyle)
+    "D204",  # Ignore requirement for 1 blank line after class docstring (pydocstyle)
+    "D205",  # Ignore requirement for 1 blank line between summary line and description (pydocstyle)
+    "D212",  # Ignore requirement that multi-line docstring summary should start at the first line (pydocstyle)
+    "D401",  # Ignore requirement that first line should be in imperative mood (pydocstyle)
+    "D411",  # Ignore missing blank line before section (pydocstyle)
+    "D413",  # Ignore missing blank line after last section (pydocstyle)
+]
+line-length=120
