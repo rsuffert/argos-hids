@@ -71,6 +71,7 @@ class LSTMClassifier(pl.LightningModule):
         """Initialize the LSTM classifier with the given configuration."""
         super().__init__()
         self.save_hyperparameters(config.__dict__)
+        self.lr = config.lr
 
         self.lstm = torch.nn.LSTM(
             input_size=config.input_size,
@@ -117,7 +118,7 @@ class LSTMClassifier(pl.LightningModule):
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
 # ====================
 # Data loading
@@ -161,16 +162,17 @@ class H5LazyDataset(torch.utils.data.Dataset):
             sequence = h5f["sequences"][idx]
         return sequence, self.label
 
-train_dataset = ConcatDataset([
+train_dataset: ConcatDataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1)
 ])
-valid_dataset = ConcatDataset([
+valid_dataset: ConcatDataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
 ])
 
-num_workers = (os.cpu_count() // 2) if os.cpu_count() > 1 else 1
+cpu_count = os.cpu_count()
+num_workers = (cpu_count // 2) if cpu_count else 1
 train_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
