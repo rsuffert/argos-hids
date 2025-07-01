@@ -1,0 +1,13 @@
+######## DongTing dataset files .gitignore ########
+
+# Raw data files
+*_data/
+
+# Processed data files
+*.h5
+
+# Baseline/reference spreadsheets
+*.xlsx
+
+# Mapping from syscall names to syscall IDs
+*.tbl
