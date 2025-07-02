@@ -1,0 +1,19 @@
+# Output directories
+output_*/
+pipeline_data/
+test_*/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files
+*.h5
+*.xlsx
+*.log
+*.tbl
+
+# Temporary files
+*.tmp
+*.temp
