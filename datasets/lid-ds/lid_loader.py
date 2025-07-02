@@ -318,7 +318,7 @@ if __name__ == "__main__":
     
     if not os.path.exists(scenario_path):
         print(f"Error: Scenario path does not exist: {scenario_path}")
-        print("Usage: python loader.py [scenario_path] [output_dir]")
+        print("Usage: python lid_loader.py [scenario_path] [output_dir]")
         sys.exit(1)
     
     try:
