@@ -7,19 +7,19 @@ Dynamically extracts syscalls from any LID-DS scenario.
 
 import os
 import sys
-import pandas as pd
-from typing import Dict, List, Tuple
 import logging
+import pandas as pd
+from typing import Dict, List, Tuple, Optional
 
 def create_syscall_table_from_mappings(syscall_mappings: Dict[str, int], output_path: str) -> None:
     """
-    Create a syscall table file compatible with the loader from LID-DS syscall mappings
+    Create a syscall table file compatible with the loader from LID-DS syscall mappings.
     
     Args:
         syscall_mappings: Dictionary mapping syscall names to IDs
         output_path: Path where to save the syscall table file
     """
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("# Syscall table generated from LID-DS scenario data\n")
         f.write("# Format: ID ABI NAME\n")
         f.write("#\n")
@@ -36,7 +36,7 @@ def create_syscall_table_from_mappings(syscall_mappings: Dict[str, int], output_
 
 def extract_syscalls_from_sc_file(sc_file_path: str) -> List[str]:
     """
-    Extract syscalls from a .sc file (LID-DS format)
+    Extract syscalls from a .sc file (LID-DS format).
     
     Args:
         sc_file_path: Path to the .sc file
@@ -47,7 +47,7 @@ def extract_syscalls_from_sc_file(sc_file_path: str) -> List[str]:
     syscalls = []
     
     try:
-        with open(sc_file_path, 'r', encoding='utf-8') as f:
+        with open(sc_file_path, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 6:
@@ -61,7 +61,7 @@ def extract_syscalls_from_sc_file(sc_file_path: str) -> List[str]:
 
 def create_raw_sequence_files(scenario_path: str, output_dir: str, separator: str = "|") -> List[str]:
     """
-    Convert LID-DS .sc files to raw sequence files compatible with the loader
+    Convert LID-DS .sc files to raw sequence files compatible with the loader.
     
     Args:
         scenario_path: Path to the LID-DS scenario directory
@@ -91,7 +91,7 @@ def create_raw_sequence_files(scenario_path: str, output_dir: str, separator: st
 
 def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
     """
-    Create a baseline Excel file with labels and classes for the sequence files
+    Create a baseline Excel file with labels and classes for the sequence files.
     
     Args:
         sequence_files: List of created sequence file paths
@@ -103,13 +103,13 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
         filename = os.path.basename(file_path)
         
         # Extract bug name (remove .log extension)
-        bug_name = filename[:-4] if filename.endswith('.log') else filename
+        bug_name = filename[:-4] if filename.endswith(".log") else filename
         
         # Determine label and class based on filename
-        if filename.startswith('normal_'):
+        if filename.startswith("normal_"):
             label = 0  # Normal = 0
             class_name = "normal"
-        elif filename.startswith('attack_'):
+        elif filename.startswith("attack_"):
             label = 1  # Attack = 1  
             class_name = "attack"
         else:
@@ -117,9 +117,9 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
             class_name = "normal"
         
         data.append({
-            'kcb_bug_name': bug_name,
-            'kcb_seq_lables': label,
-            'kcb_seq_class': class_name
+            "kcb_bug_name": bug_name,
+            "kcb_seq_lables": label,
+            "kcb_seq_class": class_name
         })
     
     # Create DataFrame and save to Excel
@@ -133,7 +133,7 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
 
 def setup_pipeline_directories(base_output_dir: str) -> Tuple[str, str, str, str]:
     """
-    Setup directory structure compatible with the loader pipeline
+    Setup directory structure compatible with the loader pipeline.
     
     Args:
         base_output_dir: Base directory for all pipeline files
@@ -156,7 +156,7 @@ def setup_pipeline_directories(base_output_dir: str) -> Tuple[str, str, str, str
 
 def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
     """
-    Extract all unique syscalls from a LID-DS scenario and create mappings
+    Extract all unique syscalls from a LID-DS scenario and create mappings.
     
     Args:
         scenario_path: Path to LID-DS scenario directory
@@ -170,9 +170,9 @@ def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
     file_count = 0
     
     # Search for all .sc files in the scenario
-    for root, dirs, files in os.walk(scenario_path):
+    for root, _dirs, files in os.walk(scenario_path):
         for file in files:
-            if file.endswith('.sc'):
+            if file.endswith(".sc"):
                 sc_file_path = os.path.join(root, file)
                 file_count += 1
                 logging.info(f"Processing {file_count}: {file}")
@@ -196,10 +196,10 @@ def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
 def convert_lid_ds_to_pipeline_format(
     scenario_path: str,
     output_dir: str,
-    syscall_mappings=None
+    syscall_mappings: Optional[Dict[str, int]] = None
 ) -> None:
     """
-    Main function to convert LID-DS data to pipeline-compatible format
+    Main function to convert LID-DS data to pipeline-compatible format.
     
     Args:
         scenario_path: Path to LID-DS scenario directory (e.g., SCENARIOS/CVE-2014-0160)
@@ -266,7 +266,7 @@ def create_raw_sequence_files_by_type(
     separator: str
 ) -> List[str]:
     """
-    Helper function to create raw sequence files for a specific data type
+    Helper function to create raw sequence files for a specific data type.
     
     Args:
         scenario_path: Path to LID-DS scenario
@@ -293,7 +293,7 @@ def create_raw_sequence_files_by_type(
                 syscalls = extract_syscalls_from_sc_file(sc_file)
                 if syscalls:
                     output_file = os.path.join(output_dir, f"{file_prefix}_{item}.log")
-                    with open(output_file, 'w', encoding='utf-8') as f:
+                    with open(output_file, "w", encoding="utf-8") as f:
                         f.write(separator.join(syscalls))
                     created_files.append(output_file)
                     logging.info(f"Created {file_prefix} file: {output_file} ({len(syscalls)} syscalls)")
