@@ -173,11 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# LID-DS data directories (large datasets)
-SCENARIOS/
-pipeline_data/
-LID-DS/
-
 # Output directories
 output_*/
 test_*/
@@ -187,4 +182,4 @@ test_*/
 *.xlsx
 *.log
 *.tbl
-syscall_extraction_results.txt
+
