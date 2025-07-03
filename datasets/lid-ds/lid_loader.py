@@ -232,7 +232,7 @@ def extract_syscalls_from_scenario_files(scenario_path: str) -> tuple[Set[str], 
             elif file.endswith(".zip"):
                 # Process zip file temporarily to extract syscalls
                 zip_path = os.path.join(root, file)
-                zip_syscalls = extract_syscalls_from_zip_file(zip_path)  # This returns Set[str] - PROBLEM!
+                zip_syscalls = extract_syscalls_from_zip_file(zip_path)  # Returns Set[str], which is expected for vocabulary building.
                 all_syscalls.update(zip_syscalls)
                 if zip_syscalls:
                     file_count += 1
