@@ -173,13 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Output directories
-output_*/
-test_*/
-
-# Generated data files
-*.h5
-*.xlsx
-*.log
-*.tbl
 
