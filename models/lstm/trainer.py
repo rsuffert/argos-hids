@@ -1,5 +1,5 @@
 """
-Module for training an LSTM intrusion detection model on the DongTing dataset using
+Module for training an LSTM intrusion detection model on DongTing and LID-DS datasets using
 PyTorch Lightning.
 """
 
@@ -124,10 +124,18 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
+# DongTing dataset paths
 DONGTING_BASE_DIR = os.path.join("..", "..", "datasets", "dongting")
 
-assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
-assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
+# LID-DS dataset paths  
+LID_DATA_DIR = os.path.join("..", "..", "datasets", "lid-ds", "processed_lid_data")
+
+# Check which datasets are available
+DONGTING_AVAILABLE = os.path.exists(DONGTING_BASE_DIR) and os.path.isdir(DONGTING_BASE_DIR)
+LID_DS_AVAILABLE = os.path.exists(LID_DATA_DIR) and os.path.isdir(LID_DATA_DIR)
+
+print(f"DongTing dataset available: {DONGTING_AVAILABLE}")
+print(f"LID-DS dataset available: {LID_DS_AVAILABLE}")
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
@@ -162,14 +170,72 @@ class H5LazyDataset(torch.utils.data.Dataset):
             sequence = h5f["sequences"][idx]
         return sequence, self.label
 
-train_dataset: ConcatDataset = ConcatDataset([
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1)
-])
-valid_dataset: ConcatDataset = ConcatDataset([
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
-])
+# Build datasets dynamically based on availability
+train_datasets = []
+valid_datasets = []
+
+# Add DongTing datasets if available
+if DONGTING_AVAILABLE:
+    dongting_normal_train = os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5")
+    dongting_attack_train = os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5")
+    dongting_normal_valid = os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5")
+    dongting_attack_valid = os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5")
+    
+    if os.path.exists(dongting_normal_train):
+        train_datasets.append(H5LazyDataset(dongting_normal_train, 0))
+        print(f"Added DongTing normal training data: {dongting_normal_train}")
+    if os.path.exists(dongting_attack_train):
+        train_datasets.append(H5LazyDataset(dongting_attack_train, 1))
+        print(f"Added DongTing attack training data: {dongting_attack_train}")
+    if os.path.exists(dongting_normal_valid):
+        valid_datasets.append(H5LazyDataset(dongting_normal_valid, 0))
+        print(f"Added DongTing normal validation data: {dongting_normal_valid}")
+    if os.path.exists(dongting_attack_valid):
+        valid_datasets.append(H5LazyDataset(dongting_attack_valid, 1))
+        print(f"Added DongTing attack validation data: {dongting_attack_valid}")
+
+# Add LID-DS datasets if available
+if LID_DS_AVAILABLE:
+    lid_normal_path = os.path.join(LID_DATA_DIR, "0_normal.h5")
+    lid_attack_path = os.path.join(LID_DATA_DIR, "1_attack.h5")
+    
+    if os.path.exists(lid_normal_path):
+        # For LID-DS, we'll split the data for training/validation
+        lid_normal_dataset = H5LazyDataset(lid_normal_path, 0)
+        # Use 80% for training, 20% for validation
+        normal_train_size = int(0.8 * len(lid_normal_dataset))
+        normal_valid_size = len(lid_normal_dataset) - normal_train_size
+        normal_train, normal_valid = torch.utils.data.random_split(
+            lid_normal_dataset, [normal_train_size, normal_valid_size]
+        )
+        train_datasets.append(normal_train)
+        valid_datasets.append(normal_valid)
+        print(f"Added LID-DS normal data: {normal_train_size} train, {normal_valid_size} validation")
+    
+    if os.path.exists(lid_attack_path):
+        lid_attack_dataset = H5LazyDataset(lid_attack_path, 1)
+        # Use 80% for training, 20% for validation
+        attack_train_size = int(0.8 * len(lid_attack_dataset))
+        attack_valid_size = len(lid_attack_dataset) - attack_train_size
+        attack_train, attack_valid = torch.utils.data.random_split(
+            lid_attack_dataset, [attack_train_size, attack_valid_size]
+        )
+        train_datasets.append(attack_train)
+        valid_datasets.append(attack_valid)
+        print(f"Added LID-DS attack data: {attack_train_size} train, {attack_valid_size} validation")
+
+# Ensure we have datasets to work with
+if not train_datasets:
+    raise RuntimeError("No training datasets found. Please check your data paths.")
+if not valid_datasets:
+    raise RuntimeError("No validation datasets found. Please check your data paths.")
+
+# Combine all datasets
+train_dataset: ConcatDataset = ConcatDataset(train_datasets)
+valid_dataset: ConcatDataset = ConcatDataset(valid_datasets)
+
+print(f"Total training samples: {len(train_dataset)}")
+print(f"Total validation samples: {len(valid_dataset)}")
 
 cpu_count = os.cpu_count()
 num_workers = (cpu_count // 2) if cpu_count else 1
