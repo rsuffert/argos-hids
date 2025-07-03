@@ -58,8 +58,11 @@ def process_zip_temporarily(zip_path: str, syscall_mappings: Dict[str, int], h5_
                         relative_path = os.path.relpath(sc_file_path, temp_dir)
                         logging.info(f"Processed sequence from zip: {relative_path} ({len(syscalls)} syscalls)")
         
+    except (FileNotFoundError, PermissionError, zipfile.BadZipFile) as e:
+        logging.error(f"Operational error while processing zip {zip_path}: {e}")
     except Exception as e:
-        logging.error(f"Error processing zip {zip_path}: {e}")
+        logging.error(f"Unexpected error while processing zip {zip_path}: {e}")
+        raise
     finally:
         # Clean up temporary directory
         if temp_dir and os.path.exists(temp_dir):
