@@ -167,7 +167,7 @@ if __name__ == "__main__":
         row = baseline_df[baseline_df["kcb_bug_name"] == bugname]
         if row.empty:
             return None, None
-        return row["kcb_seq_labels"].values[0], row["kcb_seq_class"].values[0]
+        return row["kcb_seq_lables"].values[0], row["kcb_seq_class"].values[0]
 
     assert os.path.exists(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not found"
     assert os.path.isdir(NORMAL_DATA_FOLDER_PATH), f"{NORMAL_DATA_FOLDER_PATH} not a directory"
