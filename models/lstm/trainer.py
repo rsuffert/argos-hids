@@ -134,8 +134,8 @@ LID_DATA_DIR = os.path.join("..", "..", "datasets", "lid-ds", "processed_lid_dat
 DONGTING_AVAILABLE = os.path.exists(DONGTING_BASE_DIR) and os.path.isdir(DONGTING_BASE_DIR)
 LID_DS_AVAILABLE = os.path.exists(LID_DATA_DIR) and os.path.isdir(LID_DATA_DIR)
 
-logging.info(f"DongTing dataset available: {DONGTING_AVAILABLE}")
-logging.info(f"LID-DS dataset available: {LID_DS_AVAILABLE}")
+print(f"DongTing dataset available: {DONGTING_AVAILABLE}")
+print(f"LID-DS dataset available: {LID_DS_AVAILABLE}")
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
