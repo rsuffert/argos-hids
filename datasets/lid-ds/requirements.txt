@@ -1,2 +1,2 @@
-pandas==2.3.0
-openpyxl
+h5py>=3.7.0
+numpy>=1.21.0

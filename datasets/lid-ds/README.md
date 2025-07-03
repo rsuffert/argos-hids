@@ -1,26 +1,44 @@
-# LID-DS Dataset Loader
+# LID-DS Loader
 
-This module provides a loader for the Leipzig Intrusion Detection System (LID-DS) dataset, converting syscall traces from any LID-DS scenario into a format compatible with the machine learning pipeline.
+A pipeline for converting LID-DS syscall datasets into ML-ready HDF5 format. This loader processes syscall traces from LID-DS scenarios.
 
 ## Features
 
-- **Dynamic syscall extraction**: Automatically discovers and maps syscalls from any LID-DS scenario
-- **Generic compatibility**: Works with any scenario (CVE-2014-0160, CVE-2017-7529, etc.)
+- **Automatic Processing**: Discovers and processes all LID-DS scenarios automatically
+- **Zip Support**: Efficiently handles compressed scenario data with temporary extraction
+- **Disk Efficient**: Processes zip files temporarily to minimize disk usage
+- **Batch Processing**: Process single scenarios or all scenarios at once
 
-## Usage
-
-```bash
-# Convert LID-DS scenario to the pipeline format
-python3 lid_loader.py
-```
-```bash
-# Convert using the Dongting loader to ML pipeline format 
-python3 loader.py
-```
-
-## Requirements
+## Installation
 
 ```bash
 cd datasets/lid-ds
 pip install -r requirements.txt
 ```
+
+## Usage
+
+### Process All Scenarios
+```bash
+# Auto-discover and process all scenarios in SCENARIOS/ directory
+python3 lid_loader.py --all
+
+# Process all scenarios with custom output directory
+python3 lid_loader.py --all /path/to/output
+```
+
+### Process Single Scenario
+```bash
+# Process specific scenario
+python3 lid_loader.py /path/to/scenario
+
+# Process with custom output directory
+python3 lid_loader.py /path/to/scenario /path/to/output
+```
+
+### Auto-Detection
+```bash
+# Auto-detect scenarios and process accordingly
+python3 lid_loader.py
+```
+### 

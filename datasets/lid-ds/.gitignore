@@ -1,6 +1,6 @@
 # Output directories
 output_*/
-pipeline_data/
+processed_lid_data/
 test_*/
 
 # Python cache
