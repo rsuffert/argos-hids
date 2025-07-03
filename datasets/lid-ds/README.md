@@ -6,13 +6,16 @@ This module provides a loader for the Leipzig Intrusion Detection System (LID-DS
 
 - **Dynamic syscall extraction**: Automatically discovers and maps syscalls from any LID-DS scenario
 - **Generic compatibility**: Works with any scenario (CVE-2014-0160, CVE-2017-7529, etc.)
-- **ML-ready output data**: Generates raw sequences, syscall tables, Excel baselines, and HDF5 files
 
 ## Usage
 
 ```bash
-# Convert any LID-DS scenario to ML pipeline format
-python3 datasets/lid-ds/loader.py SCENARIOS/CVE-2014-0160 output_directory
+# Convert LID-DS scenario to the pipeline format
+python3 lid_loader.py
+```
+```bash
+# Convert using the Dongting loader to ML pipeline format 
+python3 loader.py
 ```
 
 ## Requirements

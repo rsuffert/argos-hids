@@ -102,19 +102,22 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
     for file_path in sequence_files:
         filename = os.path.basename(file_path)
         
-        # Extract bug name (remove .log extension)
-        bug_name = filename[:-4] if filename.endswith(".log") else filename
-        
         # Determine label and class based on filename
         if filename.startswith("normal_"):
             label = 0  # Normal = 0
             class_name = "normal"
+            # For normal data
+            bug_name = filename  # Keep full filename including .log
         elif filename.startswith("attack_"):
             label = 1  # Attack = 1  
             class_name = "attack"
+            # For attack data
+            bug_name = filename[:-4] if filename.endswith(".log") else filename
+            # Remove .log extension for attack data
         else:
             label = 0  # Default to normal
             class_name = "normal"
+            bug_name = filename  # Keep full filename for normal default
         
         data.append({
             "kcb_bug_name": bug_name,
@@ -308,8 +311,8 @@ if __name__ == "__main__":
     )
     
     # Default paths - adjust as needed
-    scenario_path = os.path.join(os.path.dirname(__file__), "..", "..", "SCENARIOS", "CVE-2014-0160")
-    output_dir = os.path.join(os.path.dirname(__file__), "..", "..", "pipeline_data")
+    scenario_path = os.path.join(os.path.dirname(__file__), "SCENARIOS", "CVE-2014-0160")
+    output_dir = os.path.join(os.path.dirname(__file__), "..", "dongting")
     
     if len(sys.argv) > 1:
         scenario_path = sys.argv[1]
