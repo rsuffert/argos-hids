@@ -155,29 +155,40 @@ def process_all_scenarios_to_hdf5(
     
     # HDF5 output files
     normal_h5_path = os.path.join(output_dir, "0_normal.h5")
+    attack_h5_path = os.path.join(output_dir, "1_attack.h5")
     
     # Remove existing HDF5 files to start fresh
-    if os.path.exists(normal_h5_path):
-        os.remove(normal_h5_path)
-        logging.info(f"Removed existing file: {normal_h5_path}")
+    for h5_path in [normal_h5_path, attack_h5_path]:
+        if os.path.exists(h5_path):
+            os.remove(h5_path)
+            logging.info(f"Removed existing file: {h5_path}")
     
-    # Process all scenarios - only training data for ML training
-    total_training = 0
+    # Process all scenarios - both normal and attack data
+    total_normal = 0
+    total_attack = 0
     
     for scenario_path in scenarios:
         scenario_name = os.path.basename(scenario_path)
         logging.info(f"Processing scenario: {scenario_name}")
         
-        # Process training data (normal/benign data for ML training)
-        training_count = process_scenario_data_by_type(
-            scenario_path, "training", "training", syscall_mappings, normal_h5_path
+        # Process normal data (training)
+        normal_count = process_scenario_data_by_type(
+            scenario_path, "training", "normal", syscall_mappings, normal_h5_path
         )
-        total_training += training_count
         
-        logging.info(f"Scenario {scenario_name}: {training_count} training sequences")
+        # Process attack data (test/normal_and_attack)
+        attack_count = process_scenario_data_by_type(
+            scenario_path, "test/normal_and_attack", "attack", syscall_mappings, attack_h5_path
+        )
+        
+        total_normal += normal_count
+        total_attack += attack_count
+        
+        logging.info(f"Scenario {scenario_name}: {normal_count} normal, {attack_count} attack")
     
     logging.info("All scenarios processing completed!")
-    logging.info(f"Total training sequences: {total_training}")
+    logging.info(f"Total normal sequences: {total_normal}")
+    logging.info(f"Total attack sequences: {total_attack}")
     logging.info(f"Syscall table: {syscall_table_path}")
     
     # Print summary
@@ -188,11 +199,12 @@ def process_all_scenarios_to_hdf5(
     for scenario_path in scenarios:
         print(f"  - {os.path.basename(scenario_path)}")
     print("\nFiles ready for ML training:")
-    print(f"Training data: {normal_h5_path} ({total_training} sequences)")
+    print(f"Normal data: {normal_h5_path} ({total_normal} sequences)")
+    print(f"Attack data: {attack_h5_path} ({total_attack} sequences)")
     print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
     print("Update your trainer.py to use these paths:")
-    print(f'H5LazyDataset("{normal_h5_path}", 0)  # Training data (normal/benign)')
-    print("Note: Only training data processed to avoid duplicates. Use separate test data for validation.")
+    print(f'normal_dataset = H5LazyDataset("{normal_h5_path}", 0)')
+    print(f'attack_dataset = H5LazyDataset("{attack_h5_path}", 1)')
 
 
 def extract_syscalls_from_scenario_files(scenario_path: str) -> tuple[Set[str], int]:
@@ -215,13 +227,13 @@ def extract_syscalls_from_scenario_files(scenario_path: str) -> tuple[Set[str], 
                 sc_file_path = os.path.join(root, file)
                 file_count += 1
                 
-                syscalls = extract_syscalls_from_sc_file(sc_file_path)
-                all_syscalls.update(syscalls)
+                syscalls = extract_syscalls_from_sc_file(sc_file_path)  # This returns List[str] - GOOD!
+                all_syscalls.update(syscalls)  # Add to vocabulary set
             
             elif file.endswith(".zip"):
                 # Process zip file temporarily to extract syscalls
                 zip_path = os.path.join(root, file)
-                zip_syscalls = extract_syscalls_from_zip_file(zip_path)
+                zip_syscalls = extract_syscalls_from_zip_file(zip_path)  # This returns Set[str] - PROBLEM!
                 all_syscalls.update(zip_syscalls)
                 if zip_syscalls:
                     file_count += 1
@@ -237,7 +249,7 @@ def extract_syscalls_from_zip_file(zip_path: str) -> Set[str]:
         zip_path: Path to the zip file
         
     Returns:
-        Set of unique syscalls found in the zip
+        Set of unique syscalls found in the zip (for vocabulary building only)
     """
     all_syscalls = set()
     temp_dir = None
@@ -255,8 +267,8 @@ def extract_syscalls_from_zip_file(zip_path: str) -> Set[str]:
             for file in files:
                 if file.endswith(".sc"):
                     sc_file_path = os.path.join(root, file)
-                    syscalls = extract_syscalls_from_sc_file(sc_file_path)
-                    all_syscalls.update(syscalls)
+                    syscalls = extract_syscalls_from_sc_file(sc_file_path)  # Returns List[str], order kept
+                    all_syscalls.update(syscalls)  # Add to vocabulary set(unique syscalls only for the list)
         
     except Exception as e:
         logging.error(f"Error extracting syscalls from zip {zip_path}: {e}")
@@ -355,9 +367,9 @@ def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
                 sc_file_path = os.path.join(root, file)
                 file_count += 1
                 logging.info(f"Processing {file_count}: {file}")
-                
-                syscalls = extract_syscalls_from_sc_file(sc_file_path)
-                all_syscalls.update(syscalls)
+                # This returns List[str], with the order preserved.
+                syscalls = extract_syscalls_from_sc_file(sc_file_path) 
+                all_syscalls.update(syscalls)  # Add to vocabulary set
     
     # Create mappings (alphabetically sorted for consistency)
     unique_syscalls = sorted(list(all_syscalls))
@@ -510,6 +522,74 @@ def process_scenario_data_by_type(
     return sequence_count
 
 
+
+def process_scenario_with_both_classes(
+    scenario_path: str,
+    output_dir: str,
+    syscall_mappings: Optional[Dict[str, int]] = None
+) -> None:
+    """
+    Process LID-DS scenario with both normal and attack data.
+    
+    Args:
+        scenario_path: Path to LID-DS scenario directory
+        output_dir: Output directory for HDF5 files and syscall table
+        syscall_mappings: Optional pre-extracted syscall mappings
+    """
+    logging.info("Starting LID-DS to HDF5 conversion with both classes...")
+    logging.info(f"Source: {scenario_path}")
+    logging.info(f"Output: {output_dir}")
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract syscall mappings if not provided
+    if syscall_mappings is None:
+        logging.info("No syscall mappings provided - extracting from scenario data...")
+        syscall_mappings = extract_all_syscalls_from_scenario(scenario_path)
+    
+    # Create syscall table file
+    syscall_table_path = os.path.join(output_dir, "syscall_64.tbl")
+    create_syscall_table_from_mappings(syscall_mappings, syscall_table_path)
+    
+    # HDF5 output files
+    normal_h5_path = os.path.join(output_dir, "0_normal.h5")
+    attack_h5_path = os.path.join(output_dir, "1_attack.h5")
+    
+    # Remove existing HDF5 files to start over
+    for h5_path in [normal_h5_path, attack_h5_path]:
+        if os.path.exists(h5_path):
+            os.remove(h5_path)
+            logging.info(f"Removed existing file: {h5_path}")
+    
+    # Process normal data (training files)
+    normal_count = process_scenario_data_by_type(
+        scenario_path, "training", "normal", syscall_mappings, normal_h5_path
+    )
+    
+    # Process attack data (test/normal_and_attack files)
+    attack_count = process_scenario_data_by_type(
+        scenario_path, "test/normal_and_attack", "attack", syscall_mappings, attack_h5_path
+    )
+    
+    logging.info("Conversion completed successfully!")
+    logging.info(f"Created {normal_count} normal sequences in: {normal_h5_path}")
+    logging.info(f"Created {attack_count} attack sequences in: {attack_h5_path}")
+    logging.info(f"Syscall table: {syscall_table_path}")
+    
+    # Print summary for trainer.py usage
+    print("\n" + "="*60)
+    print("LID-DS HDF5 CONVERSION COMPLETE")
+    print("="*60)
+    print("Files ready for ML training:")
+    print(f"Normal data: {normal_h5_path} ({normal_count} sequences)")
+    print(f"Attack data: {attack_h5_path} ({attack_count} sequences)")
+    print(f"Syscall table: {syscall_table_path}")
+    print("Update your trainer.py to use these paths:")
+    print(f'normal_dataset = H5LazyDataset("{normal_h5_path}", 0)')
+    print(f'attack_dataset = H5LazyDataset("{attack_h5_path}", 1)')
+
+
+# Update the main section to use the new function:
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -555,7 +635,7 @@ if __name__ == "__main__":
                 sys.exit(1)
             
             try:
-                process_scenario_to_hdf5(scenario_path, output_dir)
+                process_scenario_with_both_classes(scenario_path, output_dir)
                 print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
                 print(f"ML-ready files available in: {output_dir}")
             except Exception as e:
@@ -583,7 +663,7 @@ if __name__ == "__main__":
             elif len(scenarios) == 1:
                 print("Found 1 scenario. Processing single scenario...")
                 try:
-                    process_scenario_to_hdf5(scenarios[0], output_dir)
+                    process_scenario_with_both_classes(scenarios[0], output_dir)
                     print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
                     print(f"ML-ready files available in: {output_dir}")
                 except Exception as e:
