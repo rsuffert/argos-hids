@@ -11,6 +11,9 @@ import logging
 import pandas as pd
 from typing import Dict, List, Tuple, Optional
 
+# Default ABI for syscall table generation
+DEFAULT_ABI = "common"
+
 def create_syscall_table_from_mappings(syscall_mappings: Dict[str, int], output_path: str) -> None:
     """
     Create a syscall table file compatible with the loader from LID-DS syscall mappings.
@@ -25,11 +28,11 @@ def create_syscall_table_from_mappings(syscall_mappings: Dict[str, int], output_
         f.write("#\n")
         
         # Add UNKNOWN syscall at ID 0
-        f.write("0\tcommon\tUNKNOWN\n")
+        f.write(f"0\t{DEFAULT_ABI}\tUNKNOWN\n")
         
         # Add all extracted syscalls
         for syscall_name, syscall_id in sorted(syscall_mappings.items(), key=lambda x: x[1]):
-            f.write(f"{syscall_id}\tcommon\t{syscall_name}\n")
+            f.write(f"{syscall_id}\t{DEFAULT_ABI}\t{syscall_name}\n")
     
     logging.info(f"Created syscall table with {len(syscall_mappings)} syscalls at: {output_path}")
 
@@ -121,7 +124,7 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
         
         data.append({
             "kcb_bug_name": bug_name,
-            "kcb_seq_lables": label,
+            "kcb_seq_labels": label,
             "kcb_seq_class": class_name
         })
     
@@ -130,8 +133,8 @@ def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
     df.to_excel(output_path, index=False)
     
     logging.info(f"Created baseline Excel file with {len(data)} entries at: {output_path}")
-    logging.info(f"Normal samples: {len([d for d in data if d['kcb_seq_lables'] == 0])}")
-    logging.info(f"Attack samples: {len([d for d in data if d['kcb_seq_lables'] == 1])}")
+    logging.info(f"Normal samples: {len([d for d in data if d['kcb_seq_labels'] == 0])}")
+    logging.info(f"Attack samples: {len([d for d in data if d['kcb_seq_labels'] == 1])}")
 
 
 def setup_pipeline_directories(base_output_dir: str) -> Tuple[str, str, str, str]:
