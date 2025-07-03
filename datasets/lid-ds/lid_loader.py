@@ -1,15 +1,283 @@
 #!/usr/bin/env python3
 """
-LID-DS to Pipeline Adapter
-Converts LID-DS syscall data to format compatible with ML pipeline loader.
-Dynamically extracts syscalls from any LID-DS scenario.
+LID-DS Standalone Loader
+Converts LID-DS syscall data directly for the ML training.
 """
 
 import os
 import sys
 import logging
-import pandas as pd
-from typing import Dict, List, Tuple, Optional
+import h5py
+import numpy as np
+import zipfile
+import tempfile
+import shutil
+from typing import Dict, List, Optional, Set
+
+def process_zip_temporarily(zip_path: str, syscall_mappings: Dict[str, int], h5_output_path: str) -> int:
+    """
+    Process a zip file temporarily to save disk space - extract, process, then clean up.
+    
+    Args:
+        zip_path: Path to the zip file
+        syscall_mappings: Dictionary mapping syscall names to IDs
+        h5_output_path: Path to output HDF5 file
+        
+    Returns:
+        Number of sequences processed
+    """
+    sequence_count = 0
+    temp_dir = None
+    
+    try:
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp(prefix="lid_ds_temp_")
+        logging.info(f"Extracting {os.path.basename(zip_path)} to temp dir: {temp_dir}")
+        
+        # Extract zip to temporary directory
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Find and process .sc files in the extracted content
+        for root, _dirs, files in os.walk(temp_dir):
+            for file in files:
+                if file.endswith(".sc"):
+                    sc_file_path = os.path.join(root, file)
+                    
+                    # Extract syscalls from .sc file
+                    syscalls = extract_syscalls_from_sc_file(sc_file_path)
+                    if syscalls:
+                        # Convert syscall names to IDs
+                        syscall_ids = convert_syscalls_to_ids(syscalls, syscall_mappings)
+                        
+                        # Append to HDF5 file
+                        append_seq_to_h5(syscall_ids, h5_output_path)
+                        sequence_count += 1
+                        
+                        # Get a readable name from the file path
+                        relative_path = os.path.relpath(sc_file_path, temp_dir)
+                        logging.info(f"Processed sequence from zip: {relative_path} ({len(syscalls)} syscalls)")
+        
+    except Exception as e:
+        logging.error(f"Error processing zip {zip_path}: {e}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logging.info(f"Cleaned up temp dir: {temp_dir}")
+    
+    return sequence_count
+
+
+def discover_all_scenarios(base_path: str = "SCENARIOS") -> List[str]:
+    """
+    Discover all available LID-DS scenarios.
+    
+    Args:
+        base_path: Base path containing scenario directories
+        
+    Returns:
+        List of scenario directory paths
+    """
+    scenarios = []
+    
+    if not os.path.exists(base_path):
+        logging.warning(f"Scenarios directory not found: {base_path}")
+        return scenarios
+    
+    for item in os.listdir(base_path):
+        scenario_path = os.path.join(base_path, item)
+        if os.path.isdir(scenario_path):
+            # Check if it looks like a scenario (has training or test directories)
+            training_path = os.path.join(scenario_path, "training")
+            test_path = os.path.join(scenario_path, "test")
+            
+            if os.path.exists(training_path) or os.path.exists(test_path):
+                scenarios.append(scenario_path)
+                logging.info(f"Found scenario: {item}")
+    
+    return scenarios
+
+
+def process_all_scenarios_to_hdf5(
+    output_dir: str,
+    scenarios_base_path: str = "SCENARIOS"
+) -> None:
+    """
+    Automatically discover and process all LID-DS scenarios to HDF5 format.
+    
+    Args:
+        output_dir: Output directory for HDF5 files and syscall table
+        scenarios_base_path: Base path containing scenario directories
+    """
+    logging.info("Starting automatic LID-DS scenarios processing...")
+    logging.info(f"Searching for scenarios in: {scenarios_base_path}")
+    logging.info(f"Output: {output_dir}")
+    
+    # Discover all scenarios
+    scenarios = discover_all_scenarios(scenarios_base_path)
+    
+    if not scenarios:
+        logging.error("No scenarios found!")
+        return
+    
+    logging.info(f"Found {len(scenarios)} scenarios: {[os.path.basename(s) for s in scenarios]}")
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract syscalls from all scenarios combined
+    logging.info("Extracting syscalls from all scenarios...")
+    all_syscalls = set()
+    total_files = 0
+    
+    for scenario_path in scenarios:
+        scenario_syscalls, file_count = extract_syscalls_from_scenario_files(scenario_path)
+        all_syscalls.update(scenario_syscalls)
+        total_files += file_count
+        scenario_name = os.path.basename(scenario_path)
+        logging.info(f"Scenario {scenario_name}: {len(scenario_syscalls)} syscalls, {file_count} files")
+    
+    # Create unified syscall mappings
+    unique_syscalls = sorted(list(all_syscalls))
+    syscall_mappings = {}
+    for i, syscall_name in enumerate(unique_syscalls, 1):
+        syscall_mappings[syscall_name] = i
+    
+    logging.info(f"Total unique syscalls across all scenarios: {len(unique_syscalls)}")
+    logging.info(f"Total files processed: {total_files}")
+    
+    # Create syscall table file
+    syscall_table_path = os.path.join(output_dir, "syscall_64.tbl")
+    create_syscall_table_from_mappings(syscall_mappings, syscall_table_path)
+    
+    # HDF5 output files
+    normal_h5_path = os.path.join(output_dir, "0_normal.h5")
+    
+    # Remove existing HDF5 files to start fresh
+    if os.path.exists(normal_h5_path):
+        os.remove(normal_h5_path)
+        logging.info(f"Removed existing file: {normal_h5_path}")
+    
+    # Process all scenarios - only training data for ML training
+    total_training = 0
+    
+    for scenario_path in scenarios:
+        scenario_name = os.path.basename(scenario_path)
+        logging.info(f"Processing scenario: {scenario_name}")
+        
+        # Process training data (normal/benign data for ML training)
+        training_count = process_scenario_data_by_type(
+            scenario_path, "training", "training", syscall_mappings, normal_h5_path
+        )
+        total_training += training_count
+        
+        logging.info(f"Scenario {scenario_name}: {training_count} training sequences")
+    
+    logging.info("All scenarios processing completed!")
+    logging.info(f"Total training sequences: {total_training}")
+    logging.info(f"Syscall table: {syscall_table_path}")
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("LID-DS ALL SCENARIOS HDF5 CONVERSION COMPLETE")
+    print("="*60)
+    print(f"Processed {len(scenarios)} scenarios:")
+    for scenario_path in scenarios:
+        print(f"  - {os.path.basename(scenario_path)}")
+    print("\nFiles ready for ML training:")
+    print(f"Training data: {normal_h5_path} ({total_training} sequences)")
+    print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
+    print("Update your trainer.py to use these paths:")
+    print(f'H5LazyDataset("{normal_h5_path}", 0)  # Training data (normal/benign)')
+    print("Note: Only training data processed to avoid duplicates. Use separate test data for validation.")
+
+
+def extract_syscalls_from_scenario_files(scenario_path: str) -> tuple[Set[str], int]:
+    """
+    Extract all unique syscalls from a scenario's files (including zip files).
+    
+    Args:
+        scenario_path: Path to scenario directory
+        
+    Returns:
+        Tuple of (set of unique syscalls, file count)
+    """
+    all_syscalls = set()
+    file_count = 0
+    
+    # Search for all .sc files in the scenario
+    for root, _dirs, files in os.walk(scenario_path):
+        for file in files:
+            if file.endswith(".sc"):
+                sc_file_path = os.path.join(root, file)
+                file_count += 1
+                
+                syscalls = extract_syscalls_from_sc_file(sc_file_path)
+                all_syscalls.update(syscalls)
+            
+            elif file.endswith(".zip"):
+                # Process zip file temporarily to extract syscalls
+                zip_path = os.path.join(root, file)
+                zip_syscalls = extract_syscalls_from_zip_file(zip_path)
+                all_syscalls.update(zip_syscalls)
+                if zip_syscalls:
+                    file_count += 1
+    
+    return all_syscalls, file_count
+
+
+def extract_syscalls_from_zip_file(zip_path: str) -> Set[str]:
+    """
+    Extract unique syscalls from a zip file temporarily.
+    
+    Args:
+        zip_path: Path to the zip file
+        
+    Returns:
+        Set of unique syscalls found in the zip
+    """
+    all_syscalls = set()
+    temp_dir = None
+    
+    try:
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp(prefix="lid_ds_syscall_")
+        
+        # Extract zip to temporary directory
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Find and process .sc files in the extracted content
+        for root, _dirs, files in os.walk(temp_dir):
+            for file in files:
+                if file.endswith(".sc"):
+                    sc_file_path = os.path.join(root, file)
+                    syscalls = extract_syscalls_from_sc_file(sc_file_path)
+                    all_syscalls.update(syscalls)
+        
+    except Exception as e:
+        logging.error(f"Error extracting syscalls from zip {zip_path}: {e}")
+    finally:
+        # Clean up temporary directory
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+    
+    return all_syscalls
+
+
+def append_seq_to_h5(sequence: List[int], h5_path: str) -> None:
+    """Append a sequence of integers to an HDF5 file."""
+    arr = np.array(sequence, dtype=np.int16)
+    with h5py.File(h5_path, "a") as h5f:
+        if "sequences" not in h5f:
+            h5f.create_dataset("sequences",
+                shape=(0,), maxshape=(None,),
+                dtype=h5py.special_dtype(vlen=np.dtype("int16")),
+                compression="gzip"
+            )
+        dset = h5f["sequences"]
+        dset.resize((dset.shape[0] + 1,))
+        dset[-1] = arr
 
 # Default ABI for syscall table generation
 DEFAULT_ABI = "common"
@@ -62,104 +330,6 @@ def extract_syscalls_from_sc_file(sc_file_path: str) -> List[str]:
     return syscalls
 
 
-def create_raw_sequence_files(scenario_path: str, output_dir: str, separator: str = "|") -> List[str]:
-    """
-    Convert LID-DS .sc files to raw sequence files compatible with the loader.
-    
-    Args:
-        scenario_path: Path to the LID-DS scenario directory
-        output_dir: Directory where to save the raw sequence files
-        separator: Separator to use between syscalls (default "|")
-        
-    Returns:
-        List of created file paths
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    created_files = []
-    
-    # Process training files (normal data)
-    normal_files = create_raw_sequence_files_by_type(
-        scenario_path, output_dir, "training", "normal", separator
-    )
-    created_files.extend(normal_files)
-    
-    # Process test files (attack data)
-    attack_files = create_raw_sequence_files_by_type(
-        scenario_path, output_dir, "test/normal_and_attack", "attack", separator
-    )
-    created_files.extend(attack_files)
-    
-    return created_files
-
-
-def create_baseline_excel(sequence_files: List[str], output_path: str) -> None:
-    """
-    Create a baseline Excel file with labels and classes for the sequence files.
-    
-    Args:
-        sequence_files: List of created sequence file paths
-        output_path: Path where to save the baseline Excel file
-    """
-    data = []
-    
-    for file_path in sequence_files:
-        filename = os.path.basename(file_path)
-        
-        # Determine label and class based on filename
-        if filename.startswith("normal_"):
-            label = 0  # Normal = 0
-            class_name = "normal"
-            # For normal data
-            bug_name = filename  # Keep full filename including .log
-        elif filename.startswith("attack_"):
-            label = 1  # Attack = 1  
-            class_name = "attack"
-            # For attack data
-            bug_name = filename[:-4] if filename.endswith(".log") else filename
-            # Remove .log extension for attack data
-        else:
-            label = 0  # Default to normal
-            class_name = "normal"
-            bug_name = filename  # Keep full filename for normal default
-        
-        data.append({
-            "kcb_bug_name": bug_name,
-            "kcb_seq_labels": label,
-            "kcb_seq_class": class_name
-        })
-    
-    # Create DataFrame and save to Excel
-    df = pd.DataFrame(data)
-    df.to_excel(output_path, index=False)
-    
-    logging.info(f"Created baseline Excel file with {len(data)} entries at: {output_path}")
-    logging.info(f"Normal samples: {len([d for d in data if d['kcb_seq_labels'] == 0])}")
-    logging.info(f"Attack samples: {len([d for d in data if d['kcb_seq_labels'] == 1])}")
-
-
-def setup_pipeline_directories(base_output_dir: str) -> Tuple[str, str, str, str]:
-    """
-    Setup directory structure compatible with the loader pipeline.
-    
-    Args:
-        base_output_dir: Base directory for all pipeline files
-        
-    Returns:
-        Tuple of (normal_dir, abnormal_dir, syscall_table_path, baseline_path)
-    """
-    os.makedirs(base_output_dir, exist_ok=True)
-    
-    normal_dir = os.path.join(base_output_dir, "Normal_data")
-    abnormal_dir = os.path.join(base_output_dir, "Abnormal_data") 
-    syscall_table_path = os.path.join(base_output_dir, "syscall_64.tbl")
-    baseline_path = os.path.join(base_output_dir, "Baseline.xlsx")
-    
-    os.makedirs(normal_dir, exist_ok=True)
-    os.makedirs(abnormal_dir, exist_ok=True)
-    
-    return normal_dir, abnormal_dir, syscall_table_path, baseline_path
-
-
 def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
     """
     Extract all unique syscalls from a LID-DS scenario and create mappings.
@@ -199,25 +369,47 @@ def extract_all_syscalls_from_scenario(scenario_path: str) -> Dict[str, int]:
     return syscall_mappings
 
 
-def convert_lid_ds_to_pipeline_format(
+def convert_syscalls_to_ids(syscalls: List[str], syscall_lookup: Dict[str, int]) -> List[int]:
+    """
+    Convert syscall names to their integer IDs.
+    
+    Args:
+        syscalls: List of syscall names
+        syscall_lookup: Dictionary mapping syscall names to IDs
+        
+    Returns:
+        List of syscall IDs
+    """
+    syscall_ids = []
+    for syscall_name in syscalls:
+        if syscall_name in syscall_lookup:
+            syscall_ids.append(syscall_lookup[syscall_name])
+        else:
+            # Use ID 0 for unknown syscalls
+            syscall_ids.append(0)
+            logging.warning(f"Unknown syscall: {syscall_name}")
+    
+    return syscall_ids
+
+
+def process_scenario_to_hdf5(
     scenario_path: str,
     output_dir: str,
     syscall_mappings: Optional[Dict[str, int]] = None
 ) -> None:
     """
-    Main function to convert LID-DS data to pipeline-compatible format.
+    Main function to convert LID-DS scenario directly to HDF5 format for ML training.
     
     Args:
-        scenario_path: Path to LID-DS scenario directory (e.g., SCENARIOS/CVE-2014-0160)
-        output_dir: Output directory for pipeline-compatible files
+        scenario_path: Path to LID-DS scenario directory
+        output_dir: Output directory for HDF5 files and syscall table
         syscall_mappings: Optional pre-extracted syscall mappings. If None, will extract from scenario data.
     """
-    logging.info("Starting LID-DS to Pipeline conversion...")
+    logging.info("Starting LID-DS to HDF5 conversion...")
     logging.info(f"Source: {scenario_path}")
     logging.info(f"Output: {output_dir}")
     
-    # Setup directory structure
-    normal_dir, abnormal_dir, syscall_table_path, baseline_path = setup_pipeline_directories(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
     
     # Extract syscall mappings if not provided
     if syscall_mappings is None:
@@ -225,86 +417,94 @@ def convert_lid_ds_to_pipeline_format(
         syscall_mappings = extract_all_syscalls_from_scenario(scenario_path)
     
     # Create syscall table file
+    syscall_table_path = os.path.join(output_dir, "syscall_64.tbl")
     create_syscall_table_from_mappings(syscall_mappings, syscall_table_path)
     
-    # Convert .sc files to raw sequence files
-    logging.info("Converting .sc files to raw sequence format...")
-    all_files = []
+    # HDF5 output files
+    normal_h5_path = os.path.join(output_dir, "0_normal.h5")
     
-    # Process normal data (training files)
-    normal_files = create_raw_sequence_files_by_type(
-        scenario_path, normal_dir, "training", "normal", "|"
+    # Remove existing HDF5 files to start over
+    if os.path.exists(normal_h5_path):
+        os.remove(normal_h5_path)
+        logging.info(f"Removed existing file: {normal_h5_path}")
+    
+    # Process normal data (training files only)
+    normal_count = process_scenario_data_by_type(
+        scenario_path, "training", "training", syscall_mappings, normal_h5_path
     )
-    all_files.extend(normal_files)
-    
-    # Process attack data (test files)  
-    attack_files = create_raw_sequence_files_by_type(
-        scenario_path, abnormal_dir, "test/normal_and_attack", "attack", "|"
-    )
-    all_files.extend(attack_files)
-    
-    # Create baseline Excel file
-    logging.info("Creating baseline Excel file...")
-    create_baseline_excel(all_files, baseline_path)
     
     logging.info("Conversion completed successfully!")
-    logging.info(f"Created {len(normal_files)} normal sequence files")
-    logging.info(f"Created {len(attack_files)} attack sequence files")
-    logging.info(f"Pipeline files saved in: {output_dir}")
+    logging.info(f"Created {normal_count} training sequences in: {normal_h5_path}")
+    logging.info(f"Syscall table: {syscall_table_path}")
     
-    # Print environment variables for the loader
+    # Print summary for trainer.py usage
     print("\n" + "="*60)
-    print("PIPELINE SETUP COMPLETE")
+    print("LID-DS HDF5 CONVERSION COMPLETE")
     print("="*60)
-    print("Set these environment variables before running the loader:")
-    print(f'export SYSCALL_TBL_PATH="{syscall_table_path}"')
-    print(f'export NORMAL_DATA_FOLDER_PATH="{normal_dir}"') 
-    print(f'export ABNORMAL_DATA_FOLDER_PATH="{abnormal_dir}"')
-    print(f'export BASELINE_XLSX_PATH="{baseline_path}"')
-    print("\nOr copy your loader.py to the output directory and run it from there.")
+    print("Files ready for ML training:")
+    print(f"Training data: {normal_h5_path}")
+    print(f"Syscall table: {syscall_table_path}")
+    print("Update your trainer.py to use these paths:")
+    print(f'H5LazyDataset("{normal_h5_path}", 0)  # Training data')
+    print("Note: Only training data processed to avoid duplicates. Use separate test data for validation.")
 
 
-def create_raw_sequence_files_by_type(
-    scenario_path: str, 
-    output_dir: str, 
-    subdir: str, 
-    file_prefix: str, 
-    separator: str
-) -> List[str]:
+def process_scenario_data_by_type(
+    scenario_path: str,
+    subdir: str,
+    data_type: str,
+    syscall_mappings: Dict[str, int],
+    h5_output_path: str
+) -> int:
     """
-    Helper function to create raw sequence files for a specific data type.
+    Process LID-DS scenario data of a specific type and save to HDF5.
+    Handles both directories and zip files efficiently.
     
     Args:
         scenario_path: Path to LID-DS scenario
-        output_dir: Output directory for files
         subdir: Subdirectory within scenario (e.g., "training", "test/normal_and_attack")
-        file_prefix: Prefix for output files (e.g., "normal", "attack")
-        separator: Separator between syscalls
+        data_type: Type of data ("training", "normal", "attack")
+        syscall_mappings: Dictionary mapping syscall names to IDs
+        h5_output_path: Path to output HDF5 file
         
     Returns:
-        List of created file paths
+        Number of sequences processed
     """
-    created_files: List[str] = []
     data_path = os.path.join(scenario_path, subdir)
+    sequence_count = 0
     
     if not os.path.exists(data_path):
         logging.warning(f"Data path does not exist: {data_path}")
-        return created_files
+        return sequence_count
+    
+    logging.info(f"Processing {data_type} data from: {data_path}")
     
     for item in os.listdir(data_path):
         item_path = os.path.join(data_path, item)
+        
         if os.path.isdir(item_path):
+            # Process directory - look for .sc file
             sc_file = os.path.join(item_path, f"{item}.sc")
             if os.path.exists(sc_file):
+                # Extract syscalls from .sc file
                 syscalls = extract_syscalls_from_sc_file(sc_file)
                 if syscalls:
-                    output_file = os.path.join(output_dir, f"{file_prefix}_{item}.log")
-                    with open(output_file, "w", encoding="utf-8") as f:
-                        f.write(separator.join(syscalls))
-                    created_files.append(output_file)
-                    logging.info(f"Created {file_prefix} file: {output_file} ({len(syscalls)} syscalls)")
+                    # Convert syscall names to IDs
+                    syscall_ids = convert_syscalls_to_ids(syscalls, syscall_mappings)
+                    
+                    # Append to HDF5 file
+                    append_seq_to_h5(syscall_ids, h5_output_path)
+                    sequence_count += 1
+                    
+                    logging.info(f"Processed {data_type} sequence: {item} ({len(syscalls)} syscalls)")
+        
+        elif item.endswith(".zip"):
+            # Process zip file temporarily
+            zip_sequences = process_zip_temporarily(item_path, syscall_mappings, h5_output_path)
+            sequence_count += zip_sequences
+            logging.info(f"Processed zip file: {item} ({zip_sequences} sequences)")
     
-    return created_files
+    return sequence_count
 
 
 if __name__ == "__main__":
@@ -314,27 +514,90 @@ if __name__ == "__main__":
     )
     
     # Default paths - adjust as needed
-    scenario_path = os.path.join(os.path.dirname(__file__), "SCENARIOS", "CVE-2014-0160")
-    output_dir = os.path.join(os.path.dirname(__file__), "..", "dongting")
+    default_scenario_path = os.path.join(os.path.dirname(__file__), "SCENARIOS", "CVE-2014-0160")
+    output_dir = os.path.join(os.path.dirname(__file__), "processed_lid_data")
     
+    # Parse command line arguments
     if len(sys.argv) > 1:
-        scenario_path = sys.argv[1]
-    if len(sys.argv) > 2:
-        output_dir = sys.argv[2]
-    
-    if not os.path.exists(scenario_path):
-        print(f"Error: Scenario path does not exist: {scenario_path}")
-        print("Usage: python lid_loader.py [scenario_path] [output_dir]")
-        sys.exit(1)
-    
-    try:
-        # Dynamic syscall extraction
-        convert_lid_ds_to_pipeline_format(scenario_path, output_dir)
-        print("\nSuccessfully converted LID-DS data to pipeline format.")
-        print(f"Pipeline files available in: {output_dir}")
+        if sys.argv[1] == "--all" or sys.argv[1] == "-a":
+            # Process all scenarios
+            if len(sys.argv) > 2:
+                output_dir = sys.argv[2]
+            
+            scenarios_base = os.path.join(os.path.dirname(__file__), "SCENARIOS")
+            if not os.path.exists(scenarios_base):
+                print(f"Error: Scenarios directory does not exist: {scenarios_base}")
+                sys.exit(1)
+            
+            try:
+                process_all_scenarios_to_hdf5(output_dir, scenarios_base)
+                print("\nSuccessfully converted all LID-DS scenarios to HDF5 format.")
+                print(f"ML-ready files available in: {output_dir}")
+            except Exception as e:
+                logging.error(f"All scenarios conversion failed: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+        else:
+            # Process single scenario
+            scenario_path = sys.argv[1]
+            if len(sys.argv) > 2:
+                output_dir = sys.argv[2]
+            
+            if not os.path.exists(scenario_path):
+                print(f"Error: Scenario path does not exist: {scenario_path}")
+                print("Usage:")
+                print("  python lid_loader.py [scenario_path] [output_dir]")
+                print("  python lid_loader.py --all [output_dir]")
+                sys.exit(1)
+            
+            try:
+                process_scenario_to_hdf5(scenario_path, output_dir)
+                print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
+                print(f"ML-ready files available in: {output_dir}")
+            except Exception as e:
+                logging.error(f"Conversion failed: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+    else:
+        # Default: try all scenarios first, fallback to single scenario
+        scenarios_base = os.path.join(os.path.dirname(__file__), "SCENARIOS")
         
-    except Exception as e:
-        logging.error(f"Conversion failed: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        if os.path.exists(scenarios_base):
+            scenarios = discover_all_scenarios(scenarios_base)
+            if len(scenarios) > 1:
+                print(f"Found {len(scenarios)} scenarios. Processing all scenarios...")
+                try:
+                    process_all_scenarios_to_hdf5(output_dir, scenarios_base)
+                    print("\nSuccessfully converted all LID-DS scenarios to HDF5 format.")
+                    print(f"ML-ready files available in: {output_dir}")
+                except Exception as e:
+                    logging.error(f"All scenarios conversion failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    sys.exit(1)
+            elif len(scenarios) == 1:
+                print("Found 1 scenario. Processing single scenario...")
+                try:
+                    process_scenario_to_hdf5(scenarios[0], output_dir)
+                    print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
+                    print(f"ML-ready files available in: {output_dir}")
+                except Exception as e:
+                    logging.error(f"Conversion failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    sys.exit(1)
+            else:
+                print("No scenarios found in SCENARIOS directory.")
+                print("Usage:")
+                print("  python lid_loader.py                     # Auto-detect scenarios")
+                print("  python lid_loader.py [scenario_path]     # Process specific scenario")
+                print("  python lid_loader.py --all [output_dir]  # Process all scenarios")
+                sys.exit(1)
+        else:
+            print(f"Error: Scenarios directory does not exist: {scenarios_base}")
+            print("Usage:")
+            print("  python lid_loader.py [scenario_path] [output_dir]")
+            print("  python lid_loader.py --all [output_dir]")
+            sys.exit(1)
