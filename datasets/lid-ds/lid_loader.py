@@ -79,7 +79,7 @@ def discover_all_scenarios(base_path: str = "SCENARIOS") -> List[str]:
     Returns:
         List of scenario directory paths
     """
-    scenarios = []
+    scenarios:List[str] = []
     
     if not os.path.exists(base_path):
         logging.warning(f"Scenarios directory not found: {base_path}")
