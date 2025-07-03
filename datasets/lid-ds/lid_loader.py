@@ -589,98 +589,50 @@ def process_scenario_with_both_classes(
     print(f'attack_dataset = H5LazyDataset("{attack_h5_path}", 1)')
 
 
-# Update the main section to use the new function:
+# Main function to run the script
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s"
     )
     
-    # Default paths - adjust as needed
-    default_scenario_path = os.path.join(os.path.dirname(__file__), "SCENARIOS", "CVE-2014-0160")
+    # Fixed paths, adjust if necessary
+    scenarios_base = os.path.join(os.path.dirname(__file__), "SCENARIOS")
     output_dir = os.path.join(os.path.dirname(__file__), "processed_lid_data")
     
-    # Parse command line arguments
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--all" or sys.argv[1] == "-a":
-            # Process all scenarios
-            if len(sys.argv) > 2:
-                output_dir = sys.argv[2]
-            
-            scenarios_base = os.path.join(os.path.dirname(__file__), "SCENARIOS")
-            if not os.path.exists(scenarios_base):
-                print(f"Error: Scenarios directory does not exist: {scenarios_base}")
-                sys.exit(1)
-            
-            try:
-                process_all_scenarios_to_hdf5(output_dir, scenarios_base)
-                print("\nSuccessfully converted all LID-DS scenarios to HDF5 format.")
-                print(f"ML-ready files available in: {output_dir}")
-            except Exception as e:
-                logging.error(f"All scenarios conversion failed: {e}")
-                import traceback
-                traceback.print_exc()
-                sys.exit(1)
-        else:
-            # Process single scenario
-            scenario_path = sys.argv[1]
-            if len(sys.argv) > 2:
-                output_dir = sys.argv[2]
-            
-            if not os.path.exists(scenario_path):
-                print(f"Error: Scenario path does not exist: {scenario_path}")
-                print("Usage:")
-                print("  python lid_loader.py [scenario_path] [output_dir]")
-                print("  python lid_loader.py --all [output_dir]")
-                sys.exit(1)
-            
-            try:
-                process_scenario_with_both_classes(scenario_path, output_dir)
-                print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
-                print(f"ML-ready files available in: {output_dir}")
-            except Exception as e:
-                logging.error(f"Conversion failed: {e}")
-                import traceback
-                traceback.print_exc()
-                sys.exit(1)
-    else:
-        # Default: try all scenarios first, fallback to single scenario
-        scenarios_base = os.path.join(os.path.dirname(__file__), "SCENARIOS")
-        
-        if os.path.exists(scenarios_base):
-            scenarios = discover_all_scenarios(scenarios_base)
-            if len(scenarios) > 1:
-                print(f"Found {len(scenarios)} scenarios. Processing all scenarios...")
-                try:
-                    process_all_scenarios_to_hdf5(output_dir, scenarios_base)
-                    print("\nSuccessfully converted all LID-DS scenarios to HDF5 format.")
-                    print(f"ML-ready files available in: {output_dir}")
-                except Exception as e:
-                    logging.error(f"All scenarios conversion failed: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    sys.exit(1)
-            elif len(scenarios) == 1:
-                print("Found 1 scenario. Processing single scenario...")
-                try:
-                    process_scenario_with_both_classes(scenarios[0], output_dir)
-                    print("\nSuccessfully converted LID-DS scenario to HDF5 format.")
-                    print(f"ML-ready files available in: {output_dir}")
-                except Exception as e:
-                    logging.error(f"Conversion failed: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    sys.exit(1)
-            else:
-                print("No scenarios found in SCENARIOS directory.")
-                print("Usage:")
-                print("  python lid_loader.py                     # Auto-detect scenarios")
-                print("  python lid_loader.py [scenario_path]     # Process specific scenario")
-                print("  python lid_loader.py --all [output_dir]  # Process all scenarios")
-                sys.exit(1)
-        else:
-            print(f"Error: Scenarios directory does not exist: {scenarios_base}")
-            print("Usage:")
-            print("  python lid_loader.py [scenario_path] [output_dir]")
-            print("  python lid_loader.py --all [output_dir]")
-            sys.exit(1)
+    # Max. syscalls collection
+    print("=" * 60)
+    print("LID-DS LOADER - MAXIMUM SYSCALLS COLLECTION MODE")
+    print("=" * 60)
+    print("Processing all available scenarios to gather maximum syscalls...")
+    print(f"Scenarios directory: {scenarios_base}")
+    print(f"Output directory: {output_dir}")
+    
+    # Check if scenarios directory exists
+    assert os.path.exists(scenarios_base), f"Scenarios directory does not exist: {scenarios_base}"
+    
+    # Discover all scenarios
+    scenarios = discover_all_scenarios(scenarios_base)
+    
+    assert scenarios, "No scenarios found in SCENARIOS directory."
+    
+    # Process all scenarios
+    print(f"Found {len(scenarios)} scenarios:")
+    for scenario in scenarios:
+        print(f"  - {os.path.basename(scenario)}")
+    
+    print("\nProcessing all scenarios to maximize syscalls collection...")
+    
+    # Process all scenarios to gather maximum syscalls
+    process_all_scenarios_to_hdf5(output_dir, scenarios_base)
+    
+    print("\n" + "=" * 60)
+    print("SUCCESS: LID-DS SYSCALLS COLLECTION COMPLETE")
+    print("=" * 60)
+    print(f"All {len(scenarios)} scenarios processed successfully!")
+    print(f"Maximum syscalls dataset available in: {output_dir}")
+    print("\nFiles ready for ML training:")
+    print("  - 0_normal.h5 (normal syscall sequences)")
+    print("  - 1_attack.h5 (attack syscall sequences)")
+    print("  - syscall_64.tbl (syscall vocabulary)")
+    print("\nTrainer.py can now use the complete syscalls dataset!")
