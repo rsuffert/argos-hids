@@ -5,7 +5,6 @@ Converts LID-DS syscall data directly for the ML training.
 """
 
 import os
-import sys
 import logging
 import h5py
 import numpy as np
