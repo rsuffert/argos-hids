@@ -160,10 +160,10 @@ def discover_all_scenarios(base_path: str = "SCENARIOS") -> List[str]:
     for item in os.listdir(base_path):
         scenario_path = os.path.join(base_path, item)
         if os.path.isdir(scenario_path):
-            training_path = os.path.join(scenario_path, "training")
             test_path = os.path.join(scenario_path, "test")
             
-            if os.path.exists(training_path) or os.path.exists(test_path):
+            # Only look for test folders
+            if os.path.exists(test_path):
                 scenarios.append(scenario_path)
                 logging.info(f"Found scenario: {item}")
     
@@ -190,21 +190,6 @@ def extract_syscalls_from_scenario_files(scenario_path: str) -> tuple[Set[str], 
                     file_count += 1
     
     return all_syscalls, file_count
-
-def get_file_list_from_directory(directory_path: str) -> Set[str]:
-    """Get list of file/directory names from a directory."""
-    file_set: Set[str] = set()
-    
-    if not os.path.exists(directory_path):
-        logging.warning(f"Directory does not exist: {directory_path}")
-        return file_set
-    
-    for item in os.listdir(directory_path):
-        file_set.add(item)
-        logging.debug(f"Found normal file: {item}")
-    
-    logging.info(f"Found {len(file_set)} normal files to exclude")
-    return file_set
 
 def process_scenario_data_by_type(
     scenario_path: str,
@@ -259,153 +244,6 @@ def process_scenario_data_by_type(
             logging.info(f"Processed zip file: {item} ({zip_sequences} sequences)")
     
     return sequence_count
-
-def _process_attack_item(item: str, item_path: str, syscall_mappings: Dict[str, int], h5_output_path: str) -> int:
-    """Helper to process a single attack item (file, dir, or zip)."""
-    sequence_count = 0
-    # Handle direct .sc files
-    if item.endswith(".sc"):
-        try:
-            syscalls = extract_syscalls_from_sc_file(item_path)
-            if syscalls:
-                syscall_ids = convert_syscalls_to_ids(syscalls, syscall_mappings)
-                append_seq_to_h5(syscall_ids, h5_output_path)
-                sequence_count += 1
-                logging.info(f"Processed ATTACK .sc file: {item} ({len(syscalls)} syscalls)")
-        except Exception as e:
-            logging.error(f"Error processing attack .sc file {item}: {e}")
-    # Handle directories
-    elif os.path.isdir(item_path):
-        sc_file = os.path.join(item_path, f"{item}.sc")
-        if os.path.exists(sc_file):
-            syscalls = extract_syscalls_from_sc_file(sc_file)
-            if syscalls:
-                syscall_ids = convert_syscalls_to_ids(syscalls, syscall_mappings)
-                append_seq_to_h5(syscall_ids, h5_output_path)
-                sequence_count += 1
-                logging.info(f"Processed ATTACK sequence: {item} ({len(syscalls)} syscalls)")
-    # Handle ZIP files
-    elif item.endswith(".zip"):
-        zip_sequences = process_zip_temporarily(item_path, syscall_mappings, h5_output_path)
-        sequence_count += zip_sequences
-        logging.info(f"Processed attack zip file: {item} ({zip_sequences} sequences)")
-    return sequence_count
-
-def process_mixed_data_with_exclusions(
-    scenario_path: str,
-    subdir: str,
-    exclude_files: Set[str],
-    syscall_mappings: Dict[str, int],
-    h5_output_path: str
-) -> int:
-    """Process mixed data directory, excluding specified files."""
-    data_path = os.path.join(scenario_path, subdir)
-    sequence_count = 0
-
-    if not os.path.exists(data_path):
-        logging.warning(f"Data path does not exist: {data_path}")
-        return sequence_count
-
-    logging.info(f"Processing mixed data from: {data_path}")
-    logging.info(f"Excluding {len(exclude_files)} normal files")
-
-    for item in os.listdir(data_path):
-        if item in exclude_files:
-            logging.debug(f"Skipping normal file: {item}")
-            continue
-
-        item_path = os.path.join(data_path, item)
-        sequence_count += _process_attack_item(item, item_path, syscall_mappings, h5_output_path)
-
-    return sequence_count
-
-# Main processing function
-def process_all_scenarios_hdf5_separated(
-    output_dir: str,
-    scenarios_base_path: str = "SCENARIOS"
-) -> None:
-    """
-    Process all scenarios using exclusion logic,
-    filter repeated data to distinct attack from normal.
-    """
-    logging.info("Starting automatic LID-DS scenarios filtering data...")
-    
-    scenarios = discover_all_scenarios(scenarios_base_path)
-    if not scenarios:
-        logging.error("No scenarios found!")
-        return
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Extract syscalls from all scenarios
-    all_syscalls = set()
-    total_files = 0
-    
-    for scenario_path in scenarios:
-        scenario_syscalls, file_count = extract_syscalls_from_scenario_files(scenario_path)
-        all_syscalls.update(scenario_syscalls)
-        total_files += file_count
-        scenario_name = os.path.basename(scenario_path)
-        logging.info(f"Scenario {scenario_name}: {len(scenario_syscalls)} syscalls, {file_count} files")
-    
-    # Create syscall mappings
-    unique_syscalls = sorted(list(all_syscalls))
-    syscall_mappings = {}
-    for i, syscall_name in enumerate(unique_syscalls, 1):
-        syscall_mappings[syscall_name] = i
-    
-    # Create output files
-    syscall_table_path = os.path.join(output_dir, "syscall_64.tbl")
-    normal_h5_path = os.path.join(output_dir, "0_normal.h5")
-    attack_h5_path = os.path.join(output_dir, "1_attack.h5")
-    
-    create_syscall_table_from_mappings(syscall_mappings, syscall_table_path)
-    
-    # Remove existing files
-    for h5_path in [normal_h5_path, attack_h5_path]:
-        if os.path.exists(h5_path):
-            os.remove(h5_path)
-    
-    # Process all scenarios
-    total_normal = 0
-    total_attack = 0
-    
-    for scenario_path in scenarios:
-        scenario_name = os.path.basename(scenario_path)
-        logging.info(f"Processing scenario: {scenario_name}")
-        
-        # Normal data
-        training_normal = process_scenario_data_by_type(
-            scenario_path, "training", "normal", syscall_mappings, normal_h5_path
-        )
-        
-        test_normal = process_scenario_data_by_type(
-            scenario_path, "test/normal", "normal", syscall_mappings, normal_h5_path
-        )
-        
-        # Attack data with exclusions
-        normal_files = get_file_list_from_directory(
-            os.path.join(scenario_path, "test", "normal")
-        )
-        
-        attack_count = process_mixed_data_with_exclusions(
-            scenario_path, "test/normal_and_attack", normal_files,
-            syscall_mappings, attack_h5_path
-        )
-        
-        scenario_normal = training_normal + test_normal
-        total_normal += scenario_normal
-        total_attack += attack_count
-        
-        logging.info(f"Scenario {scenario_name}: {scenario_normal} normal, {attack_count} attack")
-    
-    # Print summary
-    print("\n" + "="*60)
-    print("LID-DS CONVERSION COMPLETE")
-    print("="*60)
-    print(f"Normal data: {normal_h5_path} ({total_normal} sequences)")
-    print(f"Attack data: {attack_h5_path} ({total_attack} sequences)")
-    print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
 
 def process_all_scenarios_hdf5_val_folder(
     output_dir: str,
@@ -465,14 +303,9 @@ def process_all_scenarios_hdf5_val_folder(
             scenario_path, "test/normal", "normal", syscall_mappings, normal_h5_path
         )
         
-        # TRAINING DATA: Attack data from test/normal_and_attack (excluding normal files)
-        normal_files = get_file_list_from_directory(
-            os.path.join(scenario_path, "test", "normal")
-        )
-        
-        attack_count = process_mixed_data_with_exclusions(
-            scenario_path, "test/normal_and_attack", normal_files,
-            syscall_mappings, attack_h5_path
+        # TRAINING DATA: Attack data from test/normal_and_attack (direct processing)
+        test_attack = process_scenario_data_by_type(
+            scenario_path, "test/normal_and_attack", "attack", syscall_mappings, attack_h5_path
         )
         
         # VALIDATION DATA: All data from validation folder
@@ -481,11 +314,11 @@ def process_all_scenarios_hdf5_val_folder(
         )
         
         total_normal += test_normal
-        total_attack += attack_count
+        total_attack += test_attack
         total_validation += validation_count
         
         logging.info(
-            f"Scenario {scenario_name}: Train({test_normal} normal, {attack_count} attack), "
+            f"Scenario {scenario_name}: Train({test_normal} normal, {test_attack} attack), "
             f"Val({validation_count} mixed)"
         )
     
@@ -499,10 +332,14 @@ def process_all_scenarios_hdf5_val_folder(
     print("VALIDATION DATA:")
     print(f"  Mixed: {validation_h5_path} ({total_validation} sequences)")
     print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
-    print(
-        f"\nTraining class balance: {total_normal} normal : {total_attack} attack = "
-        f"{total_normal/total_attack:.1f}:1"
-    )
+    
+    if total_attack > 0:
+        print(
+            f"\nTraining class balance: {total_normal} normal : {total_attack} attack = "
+            f"{total_normal/total_attack:.1f}:1"
+        )
+    else:
+        print(f"\nTraining data: {total_normal} normal sequences only")
 
 # Main execution
 if __name__ == "__main__":
