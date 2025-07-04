@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 LID-DS Standalone Loader
-Converts LID-DS syscall data directly for ML training using exclusion logic.
+Converts LID-DS syscall data directly for ML training.
 """
 
 import os
@@ -85,7 +85,6 @@ def create_syscall_table_from_mappings(syscall_mappings: Dict[str, int], output_
     
     logging.info(f"Created syscall table with {len(syscall_mappings)} syscalls at: {output_path}")
 
-# Zip processing functions
 def extract_syscalls_from_zip_file(zip_path: str) -> Set[str]:
     """Extract unique syscalls from a zip file temporarily."""
     all_syscalls = set()
@@ -150,7 +149,6 @@ def process_zip_temporarily(zip_path: str, syscall_mappings: Dict[str, int], h5_
     
     return sequence_count
 
-# Directory processing functions
 def discover_all_scenarios(base_path: str = "SCENARIOS") -> List[str]:
     """Discover all available LID-DS scenarios."""
     scenarios: List[str] = []
@@ -322,12 +320,15 @@ def process_mixed_data_with_exclusions(
     return sequence_count
 
 # Main processing function
-def process_all_scenarios_to_hdf5_with_exclusion(
+def process_all_scenarios_hdf5_separated(
     output_dir: str,
     scenarios_base_path: str = "SCENARIOS"
 ) -> None:
-    """Process all scenarios using exclusion logic."""
-    logging.info("Starting automatic LID-DS scenarios processing with exclusion logic...")
+    """
+    Process all scenarios using exclusion logic,
+    filter repeated data to distinct attack from normal.
+    """
+    logging.info("Starting automatic LID-DS scenarios filtering data...")
     
     scenarios = discover_all_scenarios(scenarios_base_path)
     if not scenarios:
@@ -406,6 +407,103 @@ def process_all_scenarios_to_hdf5_with_exclusion(
     print(f"Attack data: {attack_h5_path} ({total_attack} sequences)")
     print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
 
+def process_all_scenarios_hdf5_val_folder(
+    output_dir: str,
+    scenarios_base_path: str = "SCENARIOS"
+) -> None:
+    """Process all scenarios using test folders for training and validation folder for validation."""
+    logging.info("Starting LID-DS scenarios processing with validation folder...")
+    
+    scenarios = discover_all_scenarios(scenarios_base_path)
+    if not scenarios:
+        logging.error("No scenarios found!")
+        return
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract syscalls from all scenarios
+    all_syscalls = set()
+    total_files = 0
+    
+    for scenario_path in scenarios:
+        scenario_syscalls, file_count = extract_syscalls_from_scenario_files(scenario_path)
+        all_syscalls.update(scenario_syscalls)
+        total_files += file_count
+        scenario_name = os.path.basename(scenario_path)
+        logging.info(f"Scenario {scenario_name}: {len(scenario_syscalls)} syscalls, {file_count} files")
+    
+    # Create syscall mappings
+    unique_syscalls = sorted(list(all_syscalls))
+    syscall_mappings = {}
+    for i, syscall_name in enumerate(unique_syscalls, 1):
+        syscall_mappings[syscall_name] = i
+    
+    # Create output files
+    syscall_table_path = os.path.join(output_dir, "syscall_64.tbl")
+    normal_h5_path = os.path.join(output_dir, "0_normal.h5")
+    attack_h5_path = os.path.join(output_dir, "1_attack.h5")
+    validation_h5_path = os.path.join(output_dir, "validation.h5")
+    
+    create_syscall_table_from_mappings(syscall_mappings, syscall_table_path)
+    
+    # Remove existing files
+    for h5_path in [normal_h5_path, attack_h5_path, validation_h5_path]:
+        if os.path.exists(h5_path):
+            os.remove(h5_path)
+    
+    # Process all scenarios
+    total_normal = 0
+    total_attack = 0
+    total_validation = 0
+    
+    for scenario_path in scenarios:
+        scenario_name = os.path.basename(scenario_path)
+        logging.info(f"Processing scenario: {scenario_name}")
+        
+        # TRAINING DATA: Normal data from test/normal
+        test_normal = process_scenario_data_by_type(
+            scenario_path, "test/normal", "normal", syscall_mappings, normal_h5_path
+        )
+        
+        # TRAINING DATA: Attack data from test/normal_and_attack (excluding normal files)
+        normal_files = get_file_list_from_directory(
+            os.path.join(scenario_path, "test", "normal")
+        )
+        
+        attack_count = process_mixed_data_with_exclusions(
+            scenario_path, "test/normal_and_attack", normal_files,
+            syscall_mappings, attack_h5_path
+        )
+        
+        # VALIDATION DATA: All data from validation folder
+        validation_count = process_scenario_data_by_type(
+            scenario_path, "validation", "validation", syscall_mappings, validation_h5_path
+        )
+        
+        total_normal += test_normal
+        total_attack += attack_count
+        total_validation += validation_count
+        
+        logging.info(
+            f"Scenario {scenario_name}: Train({test_normal} normal, {attack_count} attack), "
+            f"Val({validation_count} mixed)"
+        )
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("LID-DS CONVERSION COMPLETE")
+    print("="*60)
+    print("TRAINING DATA:")
+    print(f"  Normal: {normal_h5_path} ({total_normal} sequences)")
+    print(f"  Attack: {attack_h5_path} ({total_attack} sequences)")
+    print("VALIDATION DATA:")
+    print(f"  Mixed: {validation_h5_path} ({total_validation} sequences)")
+    print(f"Syscall table: {syscall_table_path} ({len(unique_syscalls)} syscalls)")
+    print(
+        f"\nTraining class balance: {total_normal} normal : {total_attack} attack = "
+        f"{total_normal/total_attack:.1f}:1"
+    )
+
 # Main execution
 if __name__ == "__main__":
     logging.basicConfig(
@@ -428,9 +526,10 @@ if __name__ == "__main__":
     for scenario in scenarios:
         print(f"  - {os.path.basename(scenario)}")
     
-    process_all_scenarios_to_hdf5_with_exclusion(output_dir, scenarios_base)
+    process_all_scenarios_hdf5_val_folder(output_dir, scenarios_base)
     
     print("\nFiles ready for ML training:")
-    print("  - 0_normal.h5 (pure normal sequences)")
-    print("  - 1_attack.h5 (pure attack sequences)")
+    print("  - 0_normal.h5 (labeled normal sequences for training)")
+    print("  - 1_attack.h5 (labeled attack sequences for training)")
+    print("  - validation.h5 (mixed validation sequences)")
     print("  - syscall_64.tbl (syscall vocabulary)")
