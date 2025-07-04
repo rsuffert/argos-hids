@@ -1,5 +1,5 @@
 """
-Module for training an LSTM intrusion detection model on DongTing and LID-DS datasets using
+Module for training an LSTM intrusion detection model on the DongTing dataset using
 PyTorch Lightning.
 """
 
@@ -9,12 +9,11 @@ from dataclasses import dataclass
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, ConcatDataset, Subset
+from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
 import h5py
 import numpy as np
-import random
 
 torch.backends.cudnn.enabled = False
 
@@ -81,8 +80,7 @@ class LSTMClassifier(pl.LightningModule):
             batch_first=True
         )
         self.fc = torch.nn.Linear(config.hidden_size, config.num_classes)
-        class_weights = torch.tensor([1.0, 2.0])  # Weight attack class 2x more
-        self.criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+        self.criterion = torch.nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="binary")
         self.f1 = F1Score(task="binary")
 
@@ -126,20 +124,17 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-# DongTing dataset paths
 DONGTING_BASE_DIR = os.path.join("..", "..", "datasets", "dongting")
 
-# LID-DS dataset paths  
+assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
+assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
+
 LID_DATA_DIR = os.path.join("..", "..", "datasets", "lid-ds", "processed_lid_data")
 
-# Check which datasets are available
-DONGTING_AVAILABLE = os.path.exists(DONGTING_BASE_DIR) and os.path.isdir(DONGTING_BASE_DIR)
-LID_DS_AVAILABLE = os.path.exists(LID_DATA_DIR) and os.path.isdir(LID_DATA_DIR)
+#lid_validation_path = os.path.join(LID_DATA_DIR, "validation.h5") later on do somenthing with it.
 
-DONGTING_AVAILABLE = False  # Temporarily set to False for testing
-
-print(f"DongTing dataset available: {DONGTING_AVAILABLE}")
-print(f"LID-DS dataset available: {LID_DS_AVAILABLE}")
+assert os.path.exists(LID_DATA_DIR), f"LID-DS directory not found at {LID_DATA_DIR}"
+assert os.path.isdir(LID_DATA_DIR), f"'{LID_DATA_DIR}' not a directory"
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
@@ -174,91 +169,17 @@ class H5LazyDataset(torch.utils.data.Dataset):
             sequence = h5f["sequences"][idx]
         return sequence, self.label
 
-# Build datasets dynamically based on availability
-train_datasets = []
-valid_datasets = []
-
-
-# dongting_normal_train = os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5")
-# dongting_attack_train = os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5")
-# dongting_normal_valid = os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5")
-# dongting_attack_valid = os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5")
-
-
-# assert DONGTING_AVAILABLE, f"DongTing dataset directory not found at {DONGTING_BASE_DIR}"
-# assert os.path.exists(dongting_normal_train), f"DongTing normal train data not found at {dongting_normal_train}"
-# assert os.path.exists(dongting_attack_train), f"DongTing attack train data not found at {dongting_attack_train}"
-# assert os.path.exists(dongting_normal_valid), f"DongTing normal validation data not found at {dongting_normal_valid}"
-# assert os.path.exists(dongting_attack_valid), f"DongTing attack validation data not found at {dongting_attack_valid}"
-
-
-# train_datasets.append(H5LazyDataset(dongting_normal_train, 0))
-# train_datasets.append(H5LazyDataset(dongting_attack_train, 1))
-# valid_datasets.append(H5LazyDataset(dongting_normal_valid, 0))
-# valid_datasets.append(H5LazyDataset(dongting_attack_valid, 1))
-
-# print(f"Added DongTing normal training data: {dongting_normal_train}")
-# print(f"Added DongTing attack training data: {dongting_attack_train}")
-# print(f"Added DongTing normal validation data: {dongting_normal_valid}")
-# print(f"Added DongTing attack validation data: {dongting_attack_valid}")
-
-# Create balanced datasets by undersampling normal data
-def create_balanced_datasets(normal_path: str, attack_path: str) -> Tuple[Subset, H5LazyDataset]:
-    """Create balanced datasets by undersampling the majority class."""
-    # Load full datasets
-    normal_dataset = H5LazyDataset(normal_path, 0)
-    attack_dataset = H5LazyDataset(attack_path, 1)
-    
-    normal_count = len(normal_dataset)
-    attack_count = len(attack_dataset)
-    
-    print(f"Original counts: {normal_count} normal, {attack_count} attack (ratio {normal_count/attack_count:.1f}:1)")
-    
-    # Balance to 2:1 ratio
-    target_normal_count = attack_count * 2 
-    target_attack_count = attack_count     
-    
-    print(f"Balanced counts: {target_normal_count} normal, {target_attack_count} attack (ratio 2:1)")
-    
-    # Create random subset of normal data
-    random.seed(42)  # For reproducibility
-    normal_indices = random.sample(range(normal_count), min(target_normal_count, normal_count))
-    balanced_normal_dataset = Subset(normal_dataset, normal_indices)
-    
-    return balanced_normal_dataset, attack_dataset
-
-# Add LID-DS datasets 
-lid_normal_path = os.path.join(LID_DATA_DIR, "0_normal.h5")
-lid_attack_path = os.path.join(LID_DATA_DIR, "1_attack.h5")
-
-# Assert LID-DS directory and files exist
-assert LID_DS_AVAILABLE, f"LID-DS dataset directory not found at {LID_DATA_DIR}"
-assert os.path.exists(lid_normal_path), f"LID-DS normal data not found at {lid_normal_path}"
-assert os.path.exists(lid_attack_path), f"LID-DS attack data not found at {lid_attack_path}"
-
-# Create balanced datasets
-balanced_normal_dataset, attack_dataset = create_balanced_datasets(lid_normal_path, lid_attack_path)
-
-# Update dataset creation
-train_datasets = [balanced_normal_dataset, attack_dataset]
-valid_datasets = [balanced_normal_dataset, attack_dataset]
-
-print("Balanced dataset created:")
-print(
-    f"   Training: {len(balanced_normal_dataset)} normal + {len(attack_dataset)} attack = "
-    f"{len(balanced_normal_dataset) + len(attack_dataset)} total"
-)
-
-# Ensure we have datasets to work with
-assert train_datasets, "No training datasets found. Please check your data paths."
-assert valid_datasets, "No validation datasets found. Please check your data paths."
-
-# Combine all datasets
-train_dataset: ConcatDataset = ConcatDataset(train_datasets)
-valid_dataset: ConcatDataset = ConcatDataset(valid_datasets)
-
-print(f"Total training samples: {len(train_dataset)}")
-print(f"Total validation samples: {len(valid_dataset)}")
+train_dataset: ConcatDataset = ConcatDataset([
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1),
+    H5LazyDataset(os.path.join(LID_DATA_DIR, "0_normal.h5"), 0),
+    H5LazyDataset(os.path.join(LID_DATA_DIR, "1_attack.h5"), 1)
+])
+# Add LID validation.h5 later on, if necessary.
+valid_dataset: ConcatDataset = ConcatDataset([
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
+    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
+])
 
 cpu_count = os.cpu_count()
 num_workers = (cpu_count // 2) if cpu_count else 1
