@@ -72,8 +72,6 @@ class LIDSLoader:
             logging.error(f"Error reading .sc file {sc_file_path}: {e}")
             return []
 
-    from typing import TextIO
-
     def _parse_sc_lines(self, file_handle: TextIO, sc_file_path: Path) -> List[str]:
         """Parse lines from SC file and extract syscalls."""
         syscalls = []
