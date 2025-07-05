@@ -70,6 +70,7 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
+    # Parse the syscall table to map syscall names to their numeric IDs for ML model training
     syscalls_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscalls_map, f"Failed to parse syscall table from '{SYSCALL_TBL_PATH}'"
     
@@ -85,7 +86,7 @@ if __name__ == "__main__":
         logging.debug(f"Using split '{split}'")
 
         label, sequence = extract_label_and_seq_from_zip(syscall_dir_path)
-        sequence_ids = list(map(lambda syscall: syscalls_map[syscall], sequence))
+        sequence_ids = [syscalls_map[syscall_name] for syscall_name in sequence]
         logging.debug(f"Using label '{label}' with sequence of length {len(sequence_ids)}")
 
         append_seq_to_h5(
