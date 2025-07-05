@@ -131,9 +131,7 @@ assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory
 
 LID_DATA_DIR = os.path.join("..", "..", "datasets", "lid-ds", "processed_lid_data")
 
-#lid_validation_path = os.path.join(LID_DATA_DIR, "validation.h5") later on do somenthing with it.
-
-assert os.path.exists(LID_DATA_DIR), f"LID-DS directory not found at {LID_DATA_DIR}"
+assert os.path.exists(LID_DATA_DIR), f"'{LID_DATA_DIR}' not found"
 assert os.path.isdir(LID_DATA_DIR), f"'{LID_DATA_DIR}' not a directory"
 
 class H5LazyDataset(torch.utils.data.Dataset):
@@ -172,13 +170,14 @@ class H5LazyDataset(torch.utils.data.Dataset):
 train_dataset: ConcatDataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1),
-    H5LazyDataset(os.path.join(LID_DATA_DIR, "0_normal.h5"), 0),
-    H5LazyDataset(os.path.join(LID_DATA_DIR, "1_attack.h5"), 1)
+    H5LazyDataset(os.path.join(LID_DATA_DIR, "train_normal.h5"), 0),
+    # H5LazyDataset(os.path.join(LID_DATA_DIR, "train_attack.h5"), 1),  
 ])
-# Add LID validation.h5 later on, if necessary.
 valid_dataset: ConcatDataset = ConcatDataset([
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
     H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
+    # H5LazyDataset(os.path.join(LID_DATA_DIR, "val_normal.h5"), 0),     
+    # H5LazyDataset(os.path.join(LID_DATA_DIR, "val_attack.h5"), 1),
 ])
 
 cpu_count = os.cpu_count()
