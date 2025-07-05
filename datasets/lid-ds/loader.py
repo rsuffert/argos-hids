@@ -86,6 +86,7 @@ if __name__ == "__main__":
 
         label, sequence = extract_label_and_seq_from_zip(syscall_dir_path)
         sequence_ids = list(map(lambda syscall: syscalls_map[syscall], sequence))
+        logging.debug(f"Using label '{label}' with sequence of length {len(sequence_ids)}")
 
         append_seq_to_h5(
             sequence_ids,
