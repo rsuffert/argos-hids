@@ -85,7 +85,7 @@ if __name__ == "__main__":
         logging.debug(f"Using split '{split}'")
 
         label, sequence = extract_label_and_seq_from_zip(syscall_dir_path)
-        sequence_ids = list(map(lambda syscall: syscalls_map.get(syscall, -1), sequence))
+        sequence_ids = list(map(lambda syscall: syscalls_map[syscall], sequence))
 
         append_seq_to_h5(
             sequence_ids,
