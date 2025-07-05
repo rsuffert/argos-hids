@@ -11,6 +11,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+from typing import TextIO
 
 # Import the syscall table parser from dongting loader (local module)
 sys.path.append(str(Path(__file__).parent.parent / "dongting"))
