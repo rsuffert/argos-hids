@@ -10,7 +10,7 @@ import shutil
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # Import the syscall table parser from dongting loader
 sys.path.append(str(Path(__file__).parent.parent / "dongting"))
@@ -56,33 +56,40 @@ class LIDSLoader:
     
     def _extract_syscalls_from_sc_file(self, sc_file_path: Path) -> List[str]:
         """Extract syscall names from .sc trace file."""
-        syscalls = []
-        
         try:
             with open(sc_file_path, "r") as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    try:
-                        parts = line.split()
-                        if len(parts) < 6:
-                            continue
-                        
-                        syscall_name = parts[5].strip()
-                        if syscall_name:
-                            syscalls.append(syscall_name)
-                            
-                    except (IndexError, ValueError) as e:
-                        logging.debug(f"Error parsing line {line_num} in {sc_file_path}: {e}")
-                        continue
-                        
+                return self._parse_sc_lines(f, sc_file_path)
         except Exception as e:
             logging.error(f"Error reading .sc file {sc_file_path}: {e}")
             return []
+
+    from typing import TextIO
+
+    def _parse_sc_lines(self, file_handle: TextIO, sc_file_path: Path) -> List[str]:
+        """Parse lines from SC file and extract syscalls."""
+        syscalls = []
+        
+        for line_num, line in enumerate(file_handle, 1):
+            syscall_name = self._extract_syscall_from_line(line, line_num, sc_file_path)
+            if syscall_name:
+                syscalls.append(syscall_name)
         
         return syscalls
+
+    def _extract_syscall_from_line(self, line: str, line_num: int, sc_file_path: Path) -> str:
+        """Extract syscall name from a single line."""
+        line = line.strip()
+        if not line:
+            return ""
+        
+        try:
+            parts = line.split()
+            if len(parts) >= 6:
+                return parts[5].strip()
+        except (IndexError, ValueError) as e:
+            logging.debug(f"Error parsing line {line_num} in {sc_file_path}: {e}")
+        
+        return ""
     
     def _convert_syscalls_to_ids(self, syscalls: List[str]) -> List[int]:
         """Convert syscall names to their integer IDs using external mapping."""
@@ -118,23 +125,30 @@ class LIDSLoader:
             with open(json_path, "r") as f:
                 metadata = json.load(f)
             
-            if "exploit" in metadata:
-                exploit_value = metadata["exploit"]
-                if isinstance(exploit_value, bool):
-                    return "attack" if exploit_value else "normal"
-                if isinstance(exploit_value, str):
-                    exploit_str = exploit_value.lower()
-                    if exploit_str in ["true", "1", "yes"]:
-                        return "attack"
-                    if exploit_str in ["false", "0", "no"]:
-                        return "normal"
-            
-            logging.warning(f"No valid 'exploit' field found in {json_path}")
-            return "unknown"
+            return self._parse_exploit_field(metadata.get("exploit"), json_path)
             
         except Exception as e:
             logging.error(f"Error parsing JSON {json_path}: {e}")
             return "error"
+
+    def _parse_exploit_field(self, exploit_value: Optional[object], json_path: Path) -> str:
+        """Parse the exploit field value."""
+        if exploit_value is None:
+            logging.warning(f"No valid 'exploit' field found in {json_path}")
+            return "unknown"
+        
+        if isinstance(exploit_value, bool):
+            return "attack" if exploit_value else "normal"
+        
+        if isinstance(exploit_value, str):
+            exploit_str = exploit_value.lower()
+            if exploit_str in ["true", "1", "yes"]:
+                return "attack"
+            if exploit_str in ["false", "0", "no"]:
+                return "normal"
+        
+        logging.warning(f"Invalid exploit value '{exploit_value}' in {json_path}")
+        return "unknown"
     
     def _process_zip_file(self, zip_path: Path) -> Tuple[str, List[int]]:
         """Process a single ZIP file and return label and syscall sequence."""
@@ -176,17 +190,22 @@ class LIDSLoader:
             logging.warning(f"Folder does not exist: {folder_path}")
             return {}
         
-        # Filter out MACOS
-        zip_files = [
-            f for f in folder_path.glob("*.zip") 
-            if not any(part.startswith(("__MACOSX", "._")) 
-                      for part in f.parts)
-        ]
-        
+        zip_files = self._get_valid_zip_files(folder_path)
         if not zip_files:
             logging.warning(f"No ZIP files found in {folder_path}")
             return {}
         
+        return self._process_zip_files(zip_files, folder_type)
+
+    def _get_valid_zip_files(self, folder_path: Path) -> List[Path]:
+        """Get valid ZIP files excluding MACOS artifacts."""
+        return [
+            f for f in folder_path.glob("*.zip") 
+            if not any(part.startswith(("__MACOSX", "._")) for part in f.parts)
+        ]
+
+    def _process_zip_files(self, zip_files: List[Path], folder_type: str) -> Dict[str, int]:
+        """Process a list of ZIP files and return counts."""
         counts = {"normal": 0, "attack": 0, "unknown": 0, "error": 0}
         
         logging.info(f"Processing {len(zip_files)} ZIP files from {folder_type} folder")
@@ -194,26 +213,30 @@ class LIDSLoader:
         for i, zip_file in enumerate(zip_files):
             label, syscall_ids = self._process_zip_file(zip_file)
             
-            if syscall_ids and label in ["normal", "attack"]:
-                # Determine output file based on folder type and label
-                if folder_type in ["test", "training"]:
-                    # Training data
-                    output_file = self.output_dir / f"train_{label}.h5"
-                else:  # validation
-                    # Validation data
-                    output_file = self.output_dir / f"val_{label}.h5"
-                
+            if self._should_save_sequence(syscall_ids, label):
+                output_file = self._get_output_file(folder_type, label)
                 self._append_sequence_to_h5(syscall_ids, output_file)
                 counts[label] += 1
-                
-                if (i + 1) % 50 == 0:
-                    logging.info(f"  Processed {i + 1}/{len(zip_files)} files")
             else:
                 counts[label] += 1
                 if label not in ["normal", "attack"]:
                     logging.debug(f"Skipped {zip_file.name}: label={label}, syscalls={len(syscall_ids)}")
+            
+            if (i + 1) % 50 == 0:
+                logging.info(f"  Processed {i + 1}/{len(zip_files)} files")
         
         return counts
+
+    def _should_save_sequence(self, syscall_ids: List[int], label: str) -> bool:
+        """Check if sequence should be saved."""
+        return bool(syscall_ids) and label in ["normal", "attack"]
+
+    def _get_output_file(self, folder_type: str, label: str) -> Path:
+        """Get output file path based on folder type and label."""
+        if folder_type in ["test", "training"]:
+            return self.output_dir / f"train_{label}.h5"
+        # validation
+        return self.output_dir / f"val_{label}.h5"
     
     def process_scenario(self, scenario_path: Path) -> Dict[str, Dict[str, int]]:
         """Process a single scenario (all folders: test, training, validation)."""
@@ -243,25 +266,16 @@ class LIDSLoader:
     
     def process_all_scenarios(self) -> None:
         """Process all scenarios in the scenarios base directory."""
-        # Filter out MACOS
-        scenarios = [
-            p for p in self.scenarios_base.iterdir() 
-            if p.is_dir() and not p.name.startswith("__MACOSX") and not p.name.startswith(".")
-        ]
-
+        scenarios = self._get_valid_scenarios()
         if not scenarios:
             logging.error(f"No scenarios found in {self.scenarios_base}")
             return
 
         logging.info(f"Found {len(scenarios)} scenarios: {[s.name for s in scenarios]}")
-
+        
         self._clear_output_files()
-
-        total_results = {
-            "train_normal": 0, "train_attack": 0,
-            "val_normal": 0, "val_attack": 0
-        }
-
+        total_results = self._initialize_results()
+        
         for scenario_path in scenarios:
             scenario_results = self.process_scenario(scenario_path)
             self._aggregate_results(scenario_results, total_results)
@@ -270,6 +284,20 @@ class LIDSLoader:
         self._report_missing_syscalls()
         self._print_summary(total_results)
 
+    def _get_valid_scenarios(self) -> List[Path]:
+        """Get valid scenario directories."""
+        return [
+            p for p in self.scenarios_base.iterdir() 
+            if p.is_dir() and not p.name.startswith(("__MACOSX", "."))
+        ]
+
+    def _initialize_results(self) -> Dict[str, int]:
+        """Initialize results dictionary."""
+        return {
+            "train_normal": 0, "train_attack": 0,
+            "val_normal": 0, "val_attack": 0
+        }
+    
     def _clear_output_files(self) -> None:
         """Remove existing output files before processing."""
         output_files = [
