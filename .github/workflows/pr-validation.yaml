@@ -66,8 +66,7 @@ jobs:
 
       - name: Type checking
         run: |
-          mypy --ignore-missing-imports $(git ls-files '*.py')
-          mypy --explicit-package-bases .
+          mypy --ignore-missing-imports --explicit-package-bases $(git ls-files '*.py')
 
       - name: Code complexity check
         run: |
