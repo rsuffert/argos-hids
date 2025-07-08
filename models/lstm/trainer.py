@@ -148,7 +148,10 @@ class H5LazyDataset(torch.utils.data.Dataset):
             length (int): Number of sequences in the HDF5 file.
             label (int): Label associated with the data.
         """
-        assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
+        assert os.path.exists(h5_path), (
+            f"H5 file not found at '{h5_path}'. "
+            "Did you run the preprocessing script for the dataset?"
+        )
         self.h5_path = h5_path
         with h5py.File(h5_path, "r") as h5f:
             self.length = len(h5f["sequences"])
