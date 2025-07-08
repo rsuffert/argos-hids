@@ -102,9 +102,9 @@ class LSTMClassifier(pl.LightningModule):
         loss = self.criterion(outputs, labels)
         acc = self.accuracy(preds, labels)
         f1 = self.f1(preds, labels)
-        self.log(f"{step_type}_loss", loss, prog_bar=step_type == "val")
-        self.log(f"{step_type}_acc", acc, prog_bar=step_type == "val")
-        self.log(f"{step_type}_f1", f1, prog_bar=step_type == "val")
+        self.log(f"{step_type}_loss", loss, prog_bar=True)
+        self.log(f"{step_type}_acc", acc, prog_bar=True)
+        self.log(f"{step_type}_f1", f1, prog_bar=True)
 
         return loss
 
@@ -223,7 +223,7 @@ early_stop_callback = pl.callbacks.EarlyStopping(
 trainer = pl.Trainer(
     max_epochs=MAX_EPOCHS,
     accelerator="auto",
-    logger=False,
+    logger=True,
     enable_checkpointing=True,
     callbacks=[checkpoint_callback, early_stop_callback],
 )
