@@ -124,7 +124,7 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-DONGTING_BASE_DIR = os.path.join("..", "..", "datasets", "dongting")
+DONGTING_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
 
 assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
 assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
