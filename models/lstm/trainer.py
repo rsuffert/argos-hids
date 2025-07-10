@@ -108,7 +108,7 @@ class LSTMClassifier(pl.LightningModule):
         self.log(f"{step_type}_acc", acc, prog_bar=True)
         self.log(f"{step_type}_f1", f1, prog_bar=True)
 
-        return labels, outputs, loss
+        return labels, preds, loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
         """Training step for one batch."""
@@ -117,9 +117,8 @@ class LSTMClassifier(pl.LightningModule):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
-        labels, outputs, _ = self.shared_step(batch, step_type="val")
-        probs = outputs.softmax(dim=1)[:, 1]
-        self.confusion_matrix.update(probs, labels)
+        labels, preds, _ = self.shared_step(batch, step_type="val")
+        self.confusion_matrix.update(preds, labels)
 
     def on_validation_epoch_end(self) -> None:
         """Callback for the end of validation epoch."""
