@@ -14,6 +14,7 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from torchmetrics import F1Score, Accuracy
 import h5py
 import numpy as np
+from torchmetrics.classification import BinaryConfusionMatrix
 
 torch.backends.cudnn.enabled = False
 
@@ -83,6 +84,7 @@ class LSTMClassifier(pl.LightningModule):
         self.criterion = torch.nn.CrossEntropyLoss()
         self.accuracy = Accuracy(task="binary")
         self.f1 = F1Score(task="binary")
+        self.confusion_matrix = BinaryConfusionMatrix()
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through LSTM and classification layer."""
@@ -92,7 +94,7 @@ class LSTMClassifier(pl.LightningModule):
         _, (h_n, _) = self.lstm(packed_input)
         return self.fc(h_n[-1])
 
-    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor], step_type: str) -> Tensor:
+    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor], step_type: str) -> Tuple[Tensor, Tensor, Tensor]:
         """Shared logic for training and validation steps."""
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
@@ -106,15 +108,28 @@ class LSTMClassifier(pl.LightningModule):
         self.log(f"{step_type}_acc", acc, prog_bar=True)
         self.log(f"{step_type}_f1", f1, prog_bar=True)
 
-        return loss
+        return labels, outputs, loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
         """Training step for one batch."""
-        return self.shared_step(batch, step_type="train")
+        _, _, loss = self.shared_step(batch, step_type="train")
+        return loss
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
-        self.shared_step(batch, step_type="val")
+        labels, outputs, _ = self.shared_step(batch, step_type="val")
+        probs = outputs.softmax(dim=1)[:, 1]
+        self.confusion_matrix.update(probs, labels)
+
+    def on_validation_epoch_end(self) -> None:
+        """Callback for the end of validation epoch."""
+        cm = self.confusion_matrix.compute()
+        self.confusion_matrix.reset()
+        # PyTorch Lightning's log method only supports floats
+        self.log("val_TN", float(cm[0, 0]), prog_bar=True)
+        self.log("val_FP", float(cm[0, 1]), prog_bar=True)
+        self.log("val_FN", float(cm[1, 0]), prog_bar=True)
+        self.log("val_TP", float(cm[1, 1]), prog_bar=True)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
