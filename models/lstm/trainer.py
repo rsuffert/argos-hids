@@ -126,10 +126,11 @@ class LSTMClassifier(pl.LightningModule):
         cm = self.confusion_matrix.compute()
         self.confusion_matrix.reset()
         # PyTorch Lightning's log method only supports floats
-        self.log("val_TN", float(cm[0, 0]), prog_bar=True)
-        self.log("val_FP", float(cm[0, 1]), prog_bar=True)
-        self.log("val_FN", float(cm[1, 0]), prog_bar=True)
-        self.log("val_TP", float(cm[1, 1]), prog_bar=True)
+        # we're logging this to the configured log file
+        self.log("val_TN", float(cm[0, 0]), prog_bar=False)
+        self.log("val_FP", float(cm[0, 1]), prog_bar=False)
+        self.log("val_FN", float(cm[1, 0]), prog_bar=False)
+        self.log("val_TP", float(cm[1, 1]), prog_bar=False)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
