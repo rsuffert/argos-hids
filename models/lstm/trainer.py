@@ -117,20 +117,19 @@ class LSTMClassifier(pl.LightningModule):
     def on_validation_epoch_end(self) -> None:
         """Callback for the end of validation epoch."""
         cm = self.confusion_matrix.compute()
-        self.confusion_matrix.reset()
+        val_f1 = self.val_f1.compute()
+        val_acc = self.val_accuracy.compute()
         # PyTorch Lightning's log method only supports floats
         # we're logging this to the configured log file
         self.log("val_TN", float(cm[0, 0]), prog_bar=False)
         self.log("val_FP", float(cm[0, 1]), prog_bar=False)
         self.log("val_FN", float(cm[1, 0]), prog_bar=False)
         self.log("val_TP", float(cm[1, 1]), prog_bar=False)
-
-        val_f1 = self.val_f1.compute()
-        val_acc = self.val_accuracy.compute()
-        self.val_f1.reset()
-        self.val_accuracy.reset()
         self.log("val_f1", val_f1, prog_bar=True)
         self.log("val_acc", val_acc, prog_bar=True)
+        self.confusion_matrix.reset()
+        self.val_f1.reset()
+        self.val_accuracy.reset()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
