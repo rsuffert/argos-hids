@@ -82,7 +82,7 @@ class LSTMClassifier(pl.LightningModule):
         self.criterion = torch.nn.CrossEntropyLoss()
         self.val_accuracy = BinaryAccuracy()
         self.val_f1 = BinaryF1Score()
-        self.confusion_matrix = BinaryConfusionMatrix()
+        self.val_conf_matrix = BinaryConfusionMatrix()
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through LSTM and classification layer."""
@@ -111,11 +111,11 @@ class LSTMClassifier(pl.LightningModule):
         labels, preds, _ = self.shared_step(batch)
         self.val_f1.update(preds, labels)
         self.val_accuracy.update(preds, labels)
-        self.confusion_matrix.update(preds, labels)
+        self.val_conf_matrix.update(preds, labels)
 
     def on_validation_epoch_end(self) -> None:
         """Callback for the end of validation epoch."""
-        cm = self.confusion_matrix.compute()
+        cm = self.val_conf_matrix.compute()
         val_f1 = self.val_f1.compute()
         val_acc = self.val_accuracy.compute()
         # PyTorch Lightning's log method only supports floats
@@ -126,7 +126,7 @@ class LSTMClassifier(pl.LightningModule):
         self.log("val_TP", float(cm[1, 1]), prog_bar=False)
         self.log("val_f1", val_f1, prog_bar=True)
         self.log("val_acc", val_acc, prog_bar=True)
-        self.confusion_matrix.reset()
+        self.val_conf_matrix.reset()
         self.val_f1.reset()
         self.val_accuracy.reset()
 
