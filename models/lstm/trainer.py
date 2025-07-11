@@ -93,7 +93,7 @@ class LSTMClassifier(pl.LightningModule):
         _, (h_n, _) = self.lstm(packed_input)
         return self.fc(h_n[-1])
 
-    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor], step_type: str) -> Tuple[Tensor, Tensor, Tensor]:
+    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tuple[Tensor, Tensor, Tensor]:
         """Shared logic for training and validation steps."""
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
@@ -104,12 +104,12 @@ class LSTMClassifier(pl.LightningModule):
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
         """Training step for one batch."""
-        _, _, loss = self.shared_step(batch, step_type="train")
+        _, _, loss = self.shared_step(batch)
         return loss
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
-        labels, preds, _ = self.shared_step(batch, step_type="val")
+        labels, preds, _ = self.shared_step(batch)
         self.val_f1.update(preds, labels)
         self.val_accuracy.update(preds, labels)
         self.confusion_matrix.update(preds, labels)
