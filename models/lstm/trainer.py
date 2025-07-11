@@ -11,10 +11,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
-from torchmetrics import F1Score, Accuracy
 import h5py
 import numpy as np
-from torchmetrics.classification import BinaryConfusionMatrix
+from torchmetrics.classification import BinaryF1Score, BinaryAccuracy, BinaryConfusionMatrix
 
 torch.backends.cudnn.enabled = False
 
@@ -82,8 +81,8 @@ class LSTMClassifier(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(config.hidden_size, config.num_classes)
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.accuracy = Accuracy(task="binary")
-        self.f1 = F1Score(task="binary")
+        self.val_accuracy = BinaryAccuracy()
+        self.val_f1 = BinaryF1Score()
         self.confusion_matrix = BinaryConfusionMatrix()
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
@@ -100,14 +99,7 @@ class LSTMClassifier(pl.LightningModule):
         sequences = sequences.unsqueeze(-1)
         outputs = self(sequences, lengths)
         preds = outputs.argmax(dim=1)
-
         loss = self.criterion(outputs, labels)
-        acc = self.accuracy(preds, labels)
-        f1 = self.f1(preds, labels)
-        self.log(f"{step_type}_loss", loss, prog_bar=True)
-        self.log(f"{step_type}_acc", acc, prog_bar=True)
-        self.log(f"{step_type}_f1", f1, prog_bar=True)
-
         return labels, preds, loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
@@ -118,6 +110,8 @@ class LSTMClassifier(pl.LightningModule):
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
         labels, preds, _ = self.shared_step(batch, step_type="val")
+        self.val_f1.update(preds, labels)
+        self.val_accuracy.update(preds, labels)
         self.confusion_matrix.update(preds, labels)
 
     def on_validation_epoch_end(self) -> None:
@@ -130,6 +124,13 @@ class LSTMClassifier(pl.LightningModule):
         self.log("val_FP", float(cm[0, 1]), prog_bar=False)
         self.log("val_FN", float(cm[1, 0]), prog_bar=False)
         self.log("val_TP", float(cm[1, 1]), prog_bar=False)
+
+        val_f1 = self.val_f1.compute()
+        val_acc = self.val_accuracy.compute()
+        self.val_f1.reset()
+        self.val_accuracy.reset()
+        self.log("val_f1", val_f1, prog_bar=True)
+        self.log("val_acc", val_acc, prog_bar=True)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
