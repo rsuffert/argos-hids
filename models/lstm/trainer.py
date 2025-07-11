@@ -28,7 +28,6 @@ NUM_CLASSES = 2             # Output classes: normal or attack
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
-TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
 MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 
 # ====================
