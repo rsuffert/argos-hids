@@ -11,9 +11,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
-from torchmetrics import F1Score, Accuracy
 import h5py
 import numpy as np
+from torchmetrics.classification import BinaryF1Score, BinaryAccuracy, BinaryConfusionMatrix
 
 torch.backends.cudnn.enabled = False
 
@@ -28,7 +28,6 @@ NUM_CLASSES = 2             # Output classes: normal or attack
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
-TRAIN_ATTACK_SPLIT = 0.6    # Proportion of attack data used for training
 MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 
 # ====================
@@ -81,8 +80,9 @@ class LSTMClassifier(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(config.hidden_size, config.num_classes)
         self.criterion = torch.nn.CrossEntropyLoss()
-        self.accuracy = Accuracy(task="binary")
-        self.f1 = F1Score(task="binary")
+        self.val_accuracy = BinaryAccuracy()
+        self.val_f1 = BinaryF1Score()
+        self.val_conf_matrix = BinaryConfusionMatrix()
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through LSTM and classification layer."""
@@ -92,29 +92,43 @@ class LSTMClassifier(pl.LightningModule):
         _, (h_n, _) = self.lstm(packed_input)
         return self.fc(h_n[-1])
 
-    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor], step_type: str) -> Tensor:
+    def shared_step(self, batch: Tuple[Tensor, Tensor, Tensor]) -> Tuple[Tensor, Tensor, Tensor]:
         """Shared logic for training and validation steps."""
         sequences, lengths, labels = batch
         sequences = sequences.unsqueeze(-1)
         outputs = self(sequences, lengths)
         preds = outputs.argmax(dim=1)
-
         loss = self.criterion(outputs, labels)
-        acc = self.accuracy(preds, labels)
-        f1 = self.f1(preds, labels)
-        self.log(f"{step_type}_loss", loss, prog_bar=step_type == "val")
-        self.log(f"{step_type}_acc", acc, prog_bar=step_type == "val")
-        self.log(f"{step_type}_f1", f1, prog_bar=step_type == "val")
-
-        return loss
+        return labels, preds, loss
 
     def training_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> Tensor:
         """Training step for one batch."""
-        return self.shared_step(batch, step_type="train")
+        _, _, loss = self.shared_step(batch)
+        return loss
 
     def validation_step(self, batch: Tuple[Tensor, Tensor, Tensor], _batch_idx: int) -> None:
         """Validation step for one batch."""
-        self.shared_step(batch, step_type="val")
+        labels, preds, _ = self.shared_step(batch)
+        self.val_f1.update(preds, labels)
+        self.val_accuracy.update(preds, labels)
+        self.val_conf_matrix.update(preds, labels)
+
+    def on_validation_epoch_end(self) -> None:
+        """Callback for the end of validation epoch."""
+        cm  = self.val_conf_matrix.compute()
+        f1  = self.val_f1.compute()
+        acc = self.val_accuracy.compute()
+        # PyTorch Lightning's log method only supports floats
+        # we're logging this to the configured log file
+        self.log("val_TN", float(cm[0, 0]), prog_bar=False)
+        self.log("val_FP", float(cm[0, 1]), prog_bar=False)
+        self.log("val_FN", float(cm[1, 0]), prog_bar=False)
+        self.log("val_TP", float(cm[1, 1]), prog_bar=False)
+        self.log("val_f1", f1, prog_bar=True)
+        self.log("val_acc", acc, prog_bar=True)
+        self.val_conf_matrix.reset()
+        self.val_f1.reset()
+        self.val_accuracy.reset()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
@@ -124,7 +138,7 @@ class LSTMClassifier(pl.LightningModule):
 # Data loading
 # ====================
 
-DONGTING_BASE_DIR = os.path.join("..", "..", "datasets", "dongting")
+DONGTING_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
 
 assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
 assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
@@ -148,7 +162,10 @@ class H5LazyDataset(torch.utils.data.Dataset):
             length (int): Number of sequences in the HDF5 file.
             label (int): Label associated with the data.
         """
-        assert os.path.exists(h5_path), f"HDF5 file not found at '{h5_path}'"
+        assert os.path.exists(h5_path), (
+            f"H5 file not found at '{h5_path}'. "
+            "Did you run the preprocessing script for the dataset?"
+        )
         self.h5_path = h5_path
         with h5py.File(h5_path, "r") as h5f:
             self.length = len(h5f["sequences"])
@@ -223,7 +240,7 @@ early_stop_callback = pl.callbacks.EarlyStopping(
 trainer = pl.Trainer(
     max_epochs=MAX_EPOCHS,
     accelerator="auto",
-    logger=False,
+    logger=True,
     enable_checkpointing=True,
     callbacks=[checkpoint_callback, early_stop_callback],
 )
