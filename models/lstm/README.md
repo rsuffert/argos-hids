@@ -13,7 +13,17 @@ This folder contains the implementation and related files for the LSTM (Long Sho
     pip install -r requirements.txt
     ```
 
-2. **Train the model:**
+2. **Set required environment variables**
+    ```bash
+    # These should point to the DongTing normal/attack train/validation splits
+    # They are generated after running the previously mentioned script
+    export NORMAL_TRAIN_DT_PATH=<path>
+    export ATTACK_TRAIN_DT_PATH=<path>
+    export NORMAL_VALID_DT_PATH=<path>
+    export ATTACK_VALID_DT_PATH=<path>
+    ```
+
+3. **Train the model:**
     ```bash
     python trainer.py
     ```
