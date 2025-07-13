@@ -20,11 +20,6 @@ ABNORMAL_DATA_FOLDER_PATH = os.getenv("ABNORMAL_DATA_FOLDER_PATH",
 BASELINE_XLSX_PATH        = os.getenv("BASELINE_XLSX_PATH",
                                       os.path.join(os.path.dirname(__file__), "Baseline.xlsx"))
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-
 def parse_syscall_tbl(path: str) -> Dict[str, int]:
     """
     Parses a system call table file and returns a mapping from syscall names to their IDs.
@@ -144,7 +139,8 @@ def parse_and_store_sequences(
 
                 append_seq_to_h5(sequence, f"{label}_{class_}.h5")
 
-if __name__ == "__main__":
+def main() -> None:
+    """Main function to pre-process the DongTing dataset."""
     assert os.path.exists(SYSCALL_TBL_PATH), f"Syscall table file not found: {SYSCALL_TBL_PATH}"
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
@@ -187,3 +183,11 @@ if __name__ == "__main__":
         file_parser=raw_seq_file_closure,
         label_and_class_getter=label_and_class_getter_closure
     )
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    main()
