@@ -240,4 +240,3 @@ if __name__ == "__main__":
         os.path.join(DT_BASE_DIR, "Attach_DTDS-validation.h5"))
     main(NORMAL_TRAIN_DT_PATH, ATTACK_TRAIN_DT_PATH,
          NORMAL_VALID_DT_PATH, ATTACK_VALID_DT_PATH)
-    
