@@ -17,6 +17,10 @@ from torchmetrics.classification import BinaryF1Score, BinaryAccuracy, BinaryCon
 
 torch.backends.cudnn.enabled = False
 
+# =================
+# Hyperparameters
+# =================
+
 INPUT_SIZE = 1              # Each element in the sequence is a scalar
 HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
 NUM_LAYERS = 2              # Number of stacked LSTM layers
@@ -27,6 +31,24 @@ MAX_EPOCHS = 10             # Number of training epochs
 MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
 EARLY_STOP_PATIENCE = 3     # Patience for early stopping training
 EARLY_STOP_MIN_DELTA = 1e-3 # Minimum change to qualify as an improvement
+
+# ==========================
+# Dataset (H5 files) paths
+# ==========================
+
+DT_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
+NORMAL_TRAIN_DT_PATH = os.getenv("NORMAL_TRAIN_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Normal_DTDS-train.h5"))
+ATTACK_TRAIN_DT_PATH = os.getenv("ATTACK_TRAIN_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Attach_DTDS-train.h5"))
+NORMAL_VALID_DT_PATH = os.getenv("NORMAL_VALID_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Normal_DTDS-validation.h5"))
+ATTACK_VALID_DT_PATH = os.getenv("ATTACK_VALID_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Attach_DTDS-validation.h5"))
+
+# ============================
+# Training utilities & logic
+# ============================
 
 def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Custom collate function to pad sequences and prepare batches."""
@@ -160,17 +182,16 @@ class H5LazyDataset(torch.utils.data.Dataset):
             sequence = h5f["sequences"][idx]
         return sequence, self.label
 
-def main(normal_train_dt_path: str, attack_train_dt_path: str,
-         normal_valid_dt_path: str, attack_valid_dt_path: str) -> None:
+def main() -> None:
     """Main function to train the LSTM model."""
     # Lazily load the training and validation datasets
     train_dataset: ConcatDataset = ConcatDataset([
-        H5LazyDataset(normal_train_dt_path, 0),
-        H5LazyDataset(attack_train_dt_path, 1)
+        H5LazyDataset(NORMAL_TRAIN_DT_PATH, 0),
+        H5LazyDataset(ATTACK_TRAIN_DT_PATH, 1)
     ])
     valid_dataset: ConcatDataset = ConcatDataset([
-        H5LazyDataset(normal_valid_dt_path, 0),
-        H5LazyDataset(attack_valid_dt_path, 1),
+        H5LazyDataset(NORMAL_VALID_DT_PATH, 0),
+        H5LazyDataset(ATTACK_VALID_DT_PATH, 1),
     ])
 
     # Create DataLoader for training and validation datasets
@@ -228,15 +249,4 @@ def main(normal_train_dt_path: str, attack_train_dt_path: str,
     trainer.fit(model, train_loader, valid_loader)
 
 if __name__ == "__main__":
-    # Paths to the training and validation datasets
-    DT_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
-    NORMAL_TRAIN_DT_PATH = os.getenv("NORMAL_TRAIN_DT_PATH",
-        os.path.join(DT_BASE_DIR, "Normal_DTDS-train.h5"))
-    ATTACK_TRAIN_DT_PATH = os.getenv("ATTACK_TRAIN_DT_PATH",
-        os.path.join(DT_BASE_DIR, "Attach_DTDS-train.h5"))
-    NORMAL_VALID_DT_PATH = os.getenv("NORMAL_VALID_DT_PATH",
-        os.path.join(DT_BASE_DIR, "Normal_DTDS-validation.h5"))
-    ATTACK_VALID_DT_PATH = os.getenv("ATTACK_VALID_DT_PATH",
-        os.path.join(DT_BASE_DIR, "Attach_DTDS-validation.h5"))
-    main(NORMAL_TRAIN_DT_PATH, ATTACK_TRAIN_DT_PATH,
-         NORMAL_VALID_DT_PATH, ATTACK_VALID_DT_PATH)
+    main()
