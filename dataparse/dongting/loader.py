@@ -184,7 +184,6 @@ def main() -> None:
         label_and_class_getter=label_and_class_getter_closure
     )
 
-
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.DEBUG,
