@@ -17,9 +17,9 @@ from torchmetrics.classification import BinaryF1Score, BinaryAccuracy, BinaryCon
 
 torch.backends.cudnn.enabled = False
 
-# =============================
-# Hyperparameters and constants
-# =============================
+# =================
+# Hyperparameters
+# =================
 
 INPUT_SIZE = 1              # Each element in the sequence is a scalar
 HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
@@ -29,10 +29,26 @@ LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
 MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
+EARLY_STOP_PATIENCE = 3     # Patience for early stopping training
+EARLY_STOP_MIN_DELTA = 1e-3 # Minimum change to qualify as an improvement
 
-# ====================
-# Collate function
-# ====================
+# ==========================
+# Dataset (H5 files) paths
+# ==========================
+
+DT_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
+NORMAL_TRAIN_DT_PATH = os.getenv("NORMAL_TRAIN_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Normal_DTDS-train.h5"))
+ATTACK_TRAIN_DT_PATH = os.getenv("ATTACK_TRAIN_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Attach_DTDS-train.h5"))
+NORMAL_VALID_DT_PATH = os.getenv("NORMAL_VALID_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Normal_DTDS-validation.h5"))
+ATTACK_VALID_DT_PATH = os.getenv("ATTACK_VALID_DT_PATH",
+    os.path.join(DT_BASE_DIR, "Attach_DTDS-validation.h5"))
+
+# ============================
+# Training utilities & logic
+# ============================
 
 def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Custom collate function to pad sequences and prepare batches."""
@@ -49,10 +65,6 @@ def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor
     padded_sequences = pad_sequence(sequences, batch_first=True)
     labels_ = torch.as_tensor(labels, dtype=torch.long)
     return padded_sequences, lengths, labels_
-
-# ====================
-# Model definition
-# ====================
 
 @dataclass
 class LSTMConfig:
@@ -134,15 +146,6 @@ class LSTMClassifier(pl.LightningModule):
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
-# ====================
-# Data loading
-# ====================
-
-DONGTING_BASE_DIR = os.path.join("..", "..", "dataparse", "dongting")
-
-assert os.path.exists(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not found"
-assert os.path.isdir(DONGTING_BASE_DIR), f"'{DONGTING_BASE_DIR}' not a directory"
-
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
 
@@ -179,69 +182,71 @@ class H5LazyDataset(torch.utils.data.Dataset):
             sequence = h5f["sequences"][idx]
         return sequence, self.label
 
-train_dataset: ConcatDataset = ConcatDataset([
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-train.h5"), 0),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-train.h5"), 1)
-])
-valid_dataset: ConcatDataset = ConcatDataset([
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Normal_DTDS-validation.h5"), 0),
-    H5LazyDataset(os.path.join(DONGTING_BASE_DIR, "Attach_DTDS-validation.h5"), 1),
-])
+def main() -> None:
+    """Main function to train the LSTM model."""
+    # Lazily load the training and validation datasets
+    train_dataset: ConcatDataset = ConcatDataset([
+        H5LazyDataset(NORMAL_TRAIN_DT_PATH, 0),
+        H5LazyDataset(ATTACK_TRAIN_DT_PATH, 1)
+    ])
+    valid_dataset: ConcatDataset = ConcatDataset([
+        H5LazyDataset(NORMAL_VALID_DT_PATH, 0),
+        H5LazyDataset(ATTACK_VALID_DT_PATH, 1),
+    ])
 
-cpu_count = os.cpu_count()
-num_workers = (cpu_count // 2) if cpu_count else 1
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=True,
-    collate_fn=collate,
-    num_workers=num_workers
-)
-valid_loader = DataLoader(
-    valid_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=False,
-    collate_fn=collate,
-    num_workers=num_workers
-)
+    # Create DataLoader for training and validation datasets
+    # Using half of the available CPU cores for parallel data loading
+    cpu_count = os.cpu_count()
+    num_workers = (cpu_count // 2) if cpu_count else 1
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        collate_fn=collate,
+        num_workers=num_workers
+    )
+    valid_loader = DataLoader(
+        valid_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        collate_fn=collate,
+        num_workers=num_workers
+    )
 
-# ====================
-# Model instantiation
-# ====================
+    # Initialize the LSTM model instance with the specified configurations
+    model = LSTMClassifier(LSTMConfig(
+        input_size=INPUT_SIZE,
+        hidden_size=HIDDEN_SIZE,
+        num_layers=NUM_LAYERS,
+        num_classes=NUM_CLASSES,
+        lr=LEARNING_RATE
+    ))
 
-model = LSTMClassifier(LSTMConfig(
-    input_size=INPUT_SIZE,
-    hidden_size=HIDDEN_SIZE,
-    num_layers=NUM_LAYERS,
-    num_classes=NUM_CLASSES,
-    lr=LEARNING_RATE
-))
+    # Define callbacks to customize training behavior
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        monitor="val_f1",
+        mode="max",
+        save_top_k=1,
+        filename="best-val-f1",
+        verbose=True
+    )
+    early_stop_callback = pl.callbacks.EarlyStopping(
+        monitor="val_f1",
+        mode="max",
+        patience=EARLY_STOP_PATIENCE,
+        min_delta=EARLY_STOP_MIN_DELTA,
+        verbose=True
+    )
 
-# ====================
-# Training
-# ====================
+    # Initialize the PyTorch Lightning trainer and start training
+    trainer = pl.Trainer(
+        max_epochs=MAX_EPOCHS,
+        accelerator="auto",
+        logger=True,
+        enable_checkpointing=True,
+        callbacks=[checkpoint_callback, early_stop_callback],
+    )
+    trainer.fit(model, train_loader, valid_loader)
 
-checkpoint_callback = pl.callbacks.ModelCheckpoint(
-    monitor="val_f1",
-    mode="max",
-    save_top_k=1,
-    filename="best-val-f1",
-    verbose=True
-)
-
-early_stop_callback = pl.callbacks.EarlyStopping(
-    monitor="val_f1",
-    mode="max",
-    patience=3,
-    min_delta=0.001,
-    verbose=True
-)
-
-trainer = pl.Trainer(
-    max_epochs=MAX_EPOCHS,
-    accelerator="auto",
-    logger=True,
-    enable_checkpointing=True,
-    callbacks=[checkpoint_callback, early_stop_callback],
-)
-trainer.fit(model, train_loader, valid_loader)
+if __name__ == "__main__":
+    main()
