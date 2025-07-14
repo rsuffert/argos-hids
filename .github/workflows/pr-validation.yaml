@@ -77,7 +77,27 @@ jobs:
             exit 1
           fi
           echo "✅ Complexity OK"
-  
+      
+      - name: Code maintainability check
+        run: |
+          # Minimum required maintainability index (out of 100)
+          MIN_MAINTAINABILITY=50
+          
+          # Generate report with the maintainability indexes for each Python file
+          MI_REPORT=mi_report.txt
+          radon mi -s $(git ls-files '*.py') > "$MI_REPORT"
+
+          # Check if any Python file has a maintainability index below the threshold
+          awk -v min="$MIN_MAINTAINABILITY" '
+          {
+              match($0, /\(([0-9.]+)\)$/, m)
+              if (m[1] < min) {
+                  print "❌ " $1 " has maintainability index " m[1] " (minimum is " min ")"
+                  exit 1
+              }
+              print "✅ " $1 " has maintainability index " m[1] " (minimum is " min ")"
+          }' "$MI_REPORT"
+
   requirements-checks:
     name: Requirements Checks
     runs-on: ubuntu-latest
