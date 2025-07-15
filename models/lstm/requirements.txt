@@ -1,5 +1,0 @@
-h5py==3.14.0
-numpy==1.21.5
-pytorch_lightning==2.5.2
-torch==2.7.0
-torchmetrics==1.7.3
