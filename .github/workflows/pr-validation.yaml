@@ -110,26 +110,26 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install pipreqs
-        run: pip install pipreqs
+      - name: Install pigar
+        run: pip install pigar
 
       - name: Check requirements.txt files
         run: |
           set -e
 
           for dir in $(find . -type f -name "*.py" -exec dirname {} \; | sort -u); do
-            pipreqs "$dir" --force --savepath "$dir/pipreqs-requirements.txt"
+            pigar gen -f "$dir/gen-requirements.txt" "$dir"
 
-            # Check if pipreqs generated an empty requirements file. In such case,
+            # Check if the generated requirements file is empty. In such case,
             # the Python module only has standard library dependencies and doesn't
             # need a requirements.txt file.
-            if ! grep -q '[^[:space:]]' "$dir/pipreqs-requirements.txt"; then
+            if ! grep -vqE '^\s*($|#)' "$dir/gen-requirements.txt"; then
               echo "ℹ️  $dir has no external dependencies, skipping requirements.txt check."
               continue
             fi
 
-            sort "$dir/pipreqs-requirements.txt" > "$dir/pipreqs-requirements-sorted.txt"
-            sed -i 's/==.*//' "$dir/pipreqs-requirements-sorted.txt"
+            sort "$dir/gen-requirements.txt" > "$dir/gen-requirements-sorted.txt"
+            sed -i 's/==.*//' "$dir/gen-requirements-sorted.txt"
 
             if [ ! -f "$dir/requirements.txt" ]; then
               echo "❌ Python module $dir does not have a requirements.txt file."
@@ -140,12 +140,12 @@ jobs:
             sort "$dir/requirements.txt" > "$dir/requirements-sorted.txt"
             sed -i 's/==.*//' "$dir/requirements-sorted.txt"
 
-            # Enforce that at least the requirements listed by pipreqs are present in requirements.txt.
-            missing=$(comm -23 "$dir/pipreqs-requirements-sorted.txt" "$dir/requirements-sorted.txt" | grep . || true)
+            # Enforce that at least the requirements listed automatically are present in requirements.txt.
+            missing=$(comm -23 "$dir/gen-requirements-sorted.txt" "$dir/requirements-sorted.txt" | grep . || true)
             if [ -n "$missing" ]; then
               echo "❌ $dir/requirements.txt is not up-to-date with the imported environment."
-              echo "Missing: $missing"
-              echo "Please run 'pipreqs . --force' in the module directory to update it."
+              echo "Missing:\n$missing"
+              echo "Please run 'pigar gen -f $dir/requirements.txt $dir' to update it."
               exit 1
             fi
             
