@@ -5,7 +5,7 @@ import sys
 import socket
 import logging
 from argparse import ArgumentParser
-from notifications.ntfy import notify_push
+from notifications.ntfy import notify_push, Priority
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
@@ -28,7 +28,7 @@ def main() -> None:
         message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
         title=f"Intrusion Alert for {MACHINE_NAME}",
         tags=["warning"],
-        priority=5 # Highest priority
+        priority=Priority.MAX
     )
 
 if __name__ == "__main__":
