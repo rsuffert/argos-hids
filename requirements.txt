@@ -1,0 +1,4 @@
+# Install packages required by subpackages
+-r dataparse/dongting/requirements.txt
+-r models/lstm/requirements.txt
+-r notifications/requirements.txt
