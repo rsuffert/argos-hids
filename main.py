@@ -1,6 +1,7 @@
 """Main entry point for ARGOS HIDS."""
 
 import os
+import sys
 import socket
 import logging
 from argparse import ArgumentParser
@@ -13,7 +14,7 @@ def main() -> None:
     """Main function to run the ARGOS HIDS."""
     if not ARGOS_NTFY_TOPIC:
         logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
-        return
+        sys.exit(1)
 
     logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
 
