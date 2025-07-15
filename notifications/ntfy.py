@@ -1,4 +1,4 @@
-"""Module for sending intrusion detection notifications."""
+"""Module for sending intrusion detection notifications via Ntfy."""
 
 import requests
 from typing import List
