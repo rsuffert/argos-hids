@@ -24,3 +24,28 @@ lint.ignore = [
     "D413",  # Ignore missing blank line after last section (pydocstyle)
 ]
 line-length=120
+
+[project]
+name = "argos-hids"
+version = "0.1.0"
+description = "ARGOS Host-based Intrusion Detection System (HIDS)"
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "h5py (==3.14.0)",
+    "numpy (==2.2.5)",
+    "pandas (==2.2.3)",
+    "openpyxl (==3.1.5)",
+    "pytorch-lightning (==2.5.2)",
+    "torch (==2.7.0)",
+    "torchmetrics (==1.7.3)",
+    "requests (==2.32.3)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
