@@ -28,9 +28,6 @@ line-length=120
 name = "argos-hids"
 version = "0.1.0"
 description = "ARGOS Host-based Intrustion Detection System (HIDS)"
-authors = [
-    {name = "Gustavo Molina",email = "g.lisboa@edu.pucrs.br"}
-]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,6 +42,8 @@ dependencies = [
     "requests (==2.32.3)"
 ]
 
+[tool.poetry]
+package-mode = false
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
