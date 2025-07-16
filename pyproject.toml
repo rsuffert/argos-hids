@@ -24,10 +24,11 @@ lint.ignore = [
     "D413",  # Ignore missing blank line after last section (pydocstyle)
 ]
 line-length=120
+
 [project]
 name = "argos-hids"
 version = "0.1.0"
-description = "ARGOS Host-based Intrustion Detection System (HIDS)"
+description = "ARGOS Host-based Intrusion Detection System (HIDS)"
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
