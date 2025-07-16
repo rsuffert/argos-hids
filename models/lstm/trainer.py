@@ -52,7 +52,7 @@ ATTACK_VALID_DT_PATH = os.getenv("ATTACK_VALID_DT_PATH",
 
 def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor]:
     """Custom collate function to pad sequences and prepare batches."""
-    sequences, labels = map(list, zip(*batch))
+    sequences, labels = map(list, zip(*batch, strict=False))
     # PyTorch expects tensors to be floating-point, even though they are scalars in our case
     sequences = [torch.as_tensor(seq[:MAX_SEQ_LEN], dtype=torch.float32)
                  for seq in sequences]
