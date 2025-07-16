@@ -20,14 +20,20 @@ And that's it! You just need to make sure your operating system (whether it's An
 
 ## Usage
 
-In order to start the system, use the following command:
+First of all, install the dependencies with `poetry`:
 
 ```bash
-python3 main.py
+poetry install
+```
+
+Then, run the system with:
+
+```bash
+poetry run python main.py
 ```
 
 Or, to see what command-line flags can be supplied:
 
 ```bash
-python3 main.py --help
+poetry run python main.py --help
 ```
