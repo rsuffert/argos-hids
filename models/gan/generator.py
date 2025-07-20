@@ -22,10 +22,10 @@ VOCAB_SIZE = 600
 EMBEDDING_DIM = 32
 HIDDEN_DIM = 64
 LEARNING_RATE = 2e-4
-DISC_LEARNING_RATE = 1e-4 
+DISC_LEARNING_RATE = 1e-7 
 BATCH_SIZE = 32
-MAX_EPOCHS = 10
-EARLY_STOP_PATIENCE = 5
+MAX_EPOCHS = 25
+EARLY_STOP_PATIENCE = 10
 EARLY_STOP_MIN_DELTA = 1e-4
 
 class Generator(nn.Module):
@@ -34,9 +34,13 @@ class Generator(nn.Module):
         """Initialize the Generator network for synthetic syscall sequence generation."""
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(NOISE_DIM, 256),
-            nn.ReLU(),
-            nn.Linear(256, SEQ_LEN * VOCAB_SIZE),
+            nn.Linear(NOISE_DIM, 512),
+            nn.BatchNorm1d(512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 1024),
+            nn.BatchNorm1d(1024),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1024, SEQ_LEN * VOCAB_SIZE),
             nn.Softmax(dim=-1)
         )
     
@@ -51,11 +55,14 @@ class Discriminator(nn.Module):
         """Initialize the Discriminator network for distinguishing real and fake syscall sequences."""
         super().__init__()
         self.embedding = nn.Embedding(VOCAB_SIZE, EMBEDDING_DIM)
-        self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True)
+        self.lstm = nn.LSTM(
+            EMBEDDING_DIM, HIDDEN_DIM * 2, batch_first=True, num_layers=2, dropout=0.3
+        )
         self.classifier = nn.Sequential(
-            nn.Linear(HIDDEN_DIM, HIDDEN_DIM // 2),
-            nn.ReLU(),
-            nn.Linear(HIDDEN_DIM // 2, 1),
+            nn.utils.spectral_norm(nn.Linear(HIDDEN_DIM * 2, HIDDEN_DIM)),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(0.3),
+            nn.utils.spectral_norm(nn.Linear(HIDDEN_DIM, 1)),
             nn.Sigmoid()
         )
     
@@ -65,10 +72,7 @@ class Discriminator(nn.Module):
             sequences = torch.multinomial(sequences.view(-1, sequences.size(-1)), 1)
             sequences = sequences.view(-1, sequences.size(1))
         
-        # Convert float tensors to long for embedding
-        sequences = sequences.long()
-        
-        embedded = self.embedding(sequences)
+        embedded = self.embedding(sequences.long())
         _, (hidden, _) = self.lstm(embedded)
         return self.classifier(hidden[-1])
 
@@ -129,7 +133,7 @@ class SyscallGAN(pl.LightningModule):
         noise = torch.randn(batch_size, NOISE_DIM, device=self.device)
         fake_sequences = self.generator(noise)
         fake_validity = self.discriminator(fake_sequences)
-        gen_loss = self.criterion(fake_validity, torch.ones_like(fake_validity))
+        gen_loss = self.criterion(fake_validity, torch.ones_like(fake_validity) * 0.9)  # label smoothing
         self.manual_backward(gen_loss)
         
         # Manual gradient clipping for generator
@@ -139,11 +143,11 @@ class SyscallGAN(pl.LightningModule):
         # Train Discriminator
         disc_opt.zero_grad()
         real_validity = self.discriminator(real_sequences)
-        real_loss = self.criterion(real_validity, torch.ones_like(real_validity))
+        real_loss = self.criterion(real_validity, torch.ones_like(real_validity) * 0.9)
         
         fake_sequences = self.generator(torch.randn(batch_size, NOISE_DIM, device=self.device))
         fake_validity = self.discriminator(fake_sequences.detach())
-        fake_loss = self.criterion(fake_validity, torch.zeros_like(fake_validity))
+        fake_loss = self.criterion(fake_validity, torch.zeros_like(fake_validity) + 0.1)
         
         disc_loss = (real_loss + fake_loss) / 2
         self.manual_backward(disc_loss)
@@ -174,6 +178,14 @@ class SyscallGAN(pl.LightningModule):
             discrete_sequences = discrete_sequences.view(num_samples, SEQ_LEN)
         return discrete_sequences.cpu().numpy()
 
+class GenerateH5Callback(pl.Callback):
+    """Callback to generate synthetic H5 files after GAN training ends."""
+
+    def on_train_end(self, trainer: pl.Trainer, pl_module: "SyscallGAN") -> None:
+        """Generate H5 files when training ends (even if early stopped)."""
+        print("Generating synthetic H5 files...")
+        generate_synthetic_h5_files(pl_module)
+
 def train_gan(data_dir: str = "../../dataparse/dongting") -> tuple:
     """Train the GAN using existing dataset infrastructure."""
     # Use .h5 files from DongTing loader
@@ -201,20 +213,21 @@ def train_gan(data_dir: str = "../../dataparse/dongting") -> tuple:
         accelerator="auto",
         callbacks=[
             pl.callbacks.ModelCheckpoint(monitor="gen_loss", mode="min", save_top_k=1),
-            pl.callbacks.EarlyStopping(monitor="gen_loss", patience=EARLY_STOP_PATIENCE, min_delta=EARLY_STOP_MIN_DELTA)
+            pl.callbacks.EarlyStopping(
+                monitor="gen_loss",
+                patience=EARLY_STOP_PATIENCE,
+                min_delta=EARLY_STOP_MIN_DELTA
+            ),
+            GenerateH5Callback()
         ],
-        
     )
     
     trainer.fit(gan, dataloader)
     
-    # Generate synthetic H5 files for trainer.py testing
-    generate_synthetic_h5_files(gan, data_dir)
-    
-    # Fix: define synthetic_data
+    # Get synthetic data after training
     synthetic_data = gan.generate_samples(500)
     
-    return gan, synthetic_data
+    return gan, synthetic_data  # Return both values
 
 if __name__ == "__main__":
     gan, synthetic_data = train_gan()
