@@ -16,17 +16,17 @@ from models.lstm.trainer import H5LazyDataset, collate
 
 # Hyperparameters for GAN 
 
-NOISE_DIM = 100
-SEQ_LEN = 512
-VOCAB_SIZE = 600
-EMBEDDING_DIM = 32
-HIDDEN_DIM = 64
-LEARNING_RATE = 2e-4
-DISC_LEARNING_RATE = 1e-7 
-BATCH_SIZE = 32
-MAX_EPOCHS = 25
-EARLY_STOP_PATIENCE = 10
-EARLY_STOP_MIN_DELTA = 1e-4
+NOISE_DIM = 100 # Dimension of random noise input
+SEQ_LEN = 512 # Length of syscall sequences to generate
+VOCAB_SIZE = 548 # Number of unique syscalls in the vocabulary
+EMBEDDING_DIM = 32 # Embedding dimension for syscalls
+HIDDEN_DIM = 64 # Hidden dimension for LSTM in Discriminator
+LEARNING_RATE = 2e-4 # Generator learning rate
+DISC_LEARNING_RATE = 1e-5 # Discriminator learning rate
+BATCH_SIZE = 32 # Batch size for training
+MAX_EPOCHS = 100 # Maximum epochs for training
+EARLY_STOP_PATIENCE = 10 # Patience for early stopping
+EARLY_STOP_MIN_DELTA = 1e-4 # Minimum delta for early stopping
 
 class Generator(nn.Module):
     """Converts random noise to fake syscall sequences."""
@@ -91,7 +91,7 @@ def generate_synthetic_h5_files(gan_model: "SyscallGAN", output_dir: str = "../.
         "Synthetic_Attach_DTDS-test.h5": synthetic_attack,
     }
     
-    # Save each file
+    # Save each file to HDF5 format
     for filename, sequences in synthetic_files.items():
         filepath = os.path.join(output_dir, filename)
         
@@ -156,7 +156,7 @@ class SyscallGAN(pl.LightningModule):
         torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=1.0)
         disc_opt.step()
         
-        # Log metrics
+        # Log metrics while training
         self.log("gen_loss", gen_loss, prog_bar=True)
         self.log("disc_loss", disc_loss, prog_bar=True)
         self.log(
@@ -221,13 +221,13 @@ def train_gan(data_dir: str = "../../dataparse/dongting") -> tuple:
             GenerateH5Callback()
         ],
     )
-    
+    # Train the GAN
     trainer.fit(gan, dataloader)
     
     # Get synthetic data after training
     synthetic_data = gan.generate_samples(500)
     
-    return gan, synthetic_data  # Return both values
+    return gan, synthetic_data  # Return trained GAN and synthetic data
 
 if __name__ == "__main__":
     gan, synthetic_data = train_gan()
