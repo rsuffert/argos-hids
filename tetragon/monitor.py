@@ -3,33 +3,36 @@ Module for orderly retrieving syscall sequences captured by Tetragon per process
 Notice that applications that consume this module must run with elevated privileges.
 """
 
-import threading
-from typing import Dict, Optional, List
-from collections import deque, defaultdict
+from typing import Tuple
 import subprocess
 import time
 import os
 import shutil
-import contextlib
+import grpc
+from tetragon.sensors_pb2_grpc import FineGuidanceSensorsStub
+from tetragon.events_pb2 import GetEventsRequest
 
 TETRAGON_BIN = "tetragon" # NOTE: assuming Tetragon is in PATH
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
 TETRAGON_CONFIG_DIR = os.path.join("/etc", "tetragon", "tetragon.tp.d")
-TETRAGON_LOG_FILE = os.path.join("/var", "log", "tetragon", "tetragon.log")
+TETRAGON_SOCKET = "unix:///run/tetragon/tetragon.sock"
 
 class TetragonMonitor:
     """Class to manage Tetragon syscall monitoring."""
+
     def __init__(self) -> None:
         """Initialize the Tetragon monitor with a configuration path."""
         self.config_path = CONFIG_PATH
         self.tetragon_bin = TETRAGON_BIN
         self.tetragon_config_dir = TETRAGON_CONFIG_DIR
-        self.tetragon_log_file = TETRAGON_LOG_FILE
-        self.lock = threading.Lock()
-        self.syscalls: Dict[int, deque] = defaultdict(deque)
+        self.tetragon_socket = TETRAGON_SOCKET
+
         self._ensure_config()
         self._ensure_tetragon_running()
-        threading.Thread(target=self._syscall_parser_worker, daemon=True).start()
+
+        self.tetragon_grpc_chan = grpc.insecure_channel(self.tetragon_socket)
+        self.tetragon_grpc_stub = FineGuidanceSensorsStub(self.tetragon_grpc_chan)
+        self.event_iterator = iter(self.tetragon_grpc_stub.GetEvents(GetEventsRequest()))
     
     def _ensure_config(self) -> None:
         """Copy the Tetragon config file to the appropriate directory if not already present."""
@@ -46,24 +49,37 @@ class TetragonMonitor:
             return
         subprocess.run(["sudo", "systemctl", "start", "tetragon"], check=True)
         time.sleep(3) # give Tetragon time to start
-    
-    def _syscall_parser_worker(self) -> None:
-        """Worker thread to parse syscall sequences from Tetragon."""
-        return
-    
-    def get_next_sequence(self, pid: Optional[int]) -> List[int]:
-        """
-        Retrieve the next syscall sequence for a given PID.
 
-        Args:
-            pid (Optional[int]): The PID to retrieve syscalls for. If None, a random process is chosen.
+    def get_next_syscall(self) -> Tuple[int, int]:
         """
-        return []
+        Retrieve the next syscall for the monitored process.
+
+        Returns:
+            Tuple[int, int]: A tuple containing the PID and syscall ID.
+        """
+        try:
+            event = next(self.event_iterator)
+            pid = event.process_tracepoint.process.pid.value
+            syscall_id = next(
+                (arg.long_arg for arg in event.process_tracepoint.args if hasattr(arg, "long_arg")),
+                None
+            )
+            return pid, syscall_id
+        except StopIteration:
+            return None, None
+
+    def __enter__(self) -> "TetragonMonitor":
+        """Context manager entry method."""
+        return self
     
-    def __del__(self) -> None:
-        """Destructor to stop the Tetragon service."""
-        contextlib.suppress(Exception)
+    def __exit__(self, exc_type: type, exc_value: Exception, traceback: object) -> None:
+        """Context manager exit method."""
+        # Stop the Tetragon service and close the gRPC channel
         subprocess.run(["sudo", "systemctl", "stop", "tetragon"], check=True)
-        os.remove(self.tetragon_log_file)
+        self.tetragon_grpc_chan.close()
 
-TetragonMonitor()
+if __name__ == "__main__":
+    with TetragonMonitor() as monitor:
+        while True:
+            pid, syscall_id = monitor.get_next_syscall()
+            print(f"PID: {pid}, syscall_id: {syscall_id}")
