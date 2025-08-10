@@ -3,7 +3,7 @@ Module for orderly retrieving syscall sequences captured by Tetragon per process
 Notice that applications that consume this module must run with elevated privileges.
 """
 
-from typing import Tuple
+from typing import Tuple, Optional
 import subprocess
 import time
 import os
@@ -50,12 +50,12 @@ class TetragonMonitor:
         subprocess.run(["sudo", "systemctl", "start", "tetragon"], check=True)
         time.sleep(3) # give Tetragon time to start
 
-    def get_next_syscall(self) -> Tuple[int, int]:
+    def get_next_syscall(self) -> Tuple[Optional[int], Optional[int]]:
         """
         Retrieve the next syscall for the monitored process.
 
         Returns:
-            Tuple[int, int]: A tuple containing the PID and syscall ID.
+            Tuple[Optional[int], Optional[int]]: A tuple containing the PID and syscall ID.
         """
         try:
             event = next(self._event_iterator)
