@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-from tetragon import events_pb2 as tetragon_dot_events__pb2
-from tetragon import sensors_pb2 as tetragon_dot_sensors__pb2
-from tetragon import tetragon_pb2 as tetragon_dot_tetragon__pb2
+from tetragon.proto import events_pb2 as tetragon_dot_events__pb2
+from tetragon.proto import sensors_pb2 as tetragon_dot_sensors__pb2
+from tetragon.proto import tetragon_pb2 as tetragon_dot_tetragon__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__

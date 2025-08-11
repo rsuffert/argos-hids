@@ -9,8 +9,8 @@ import time
 import os
 import shutil
 import grpc
-from tetragon.sensors_pb2_grpc import FineGuidanceSensorsStub
-from tetragon.events_pb2 import GetEventsRequest # type: ignore[attr-defined] # mypy struggles with protobuf-generated code
+from tetragon.proto.sensors_pb2_grpc import FineGuidanceSensorsStub
+from tetragon.proto.events_pb2 import GetEventsRequest # type: ignore[attr-defined] # mypy struggles with protobuf-generated code
 
 TETRAGON_BIN = "tetragon" # NOTE: assuming Tetragon is in PATH
 TETRAGON_SOCKET = "unix:///run/tetragon/tetragon.sock"
