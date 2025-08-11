@@ -1,4 +1,7 @@
 [tool.ruff]
+exclude = [
+    "tetragon/proto/*" # proto-generated files
+]
 lint.select = [
     "E",    # Enforce pycodestyle errors (style, whitespace)
     "F",    # Enforce pyflakes checks (unused imports, undefined names)
@@ -40,7 +43,9 @@ dependencies = [
     "pytorch-lightning (==2.5.2)",
     "torch (==2.7.0)",
     "torchmetrics (==1.7.3)",
-    "requests (==2.32.3)"
+    "requests (==2.32.3)",
+    "grpcio (>=1.74.0,<2.0.0)",
+    "grpcio-tools (>=1.74.0,<2.0.0)"
 ]
 
 [tool.poetry]
