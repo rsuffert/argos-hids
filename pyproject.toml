@@ -1,6 +1,6 @@
 [tool.ruff]
 exclude = [
-    "tetragon/*pb2*.py" # Exclude Tetragon Python transpiled proto files (they're auto generated)
+    "tetragon/proto/*" # proto-generated files
 ]
 lint.select = [
     "E",    # Enforce pycodestyle errors (style, whitespace)

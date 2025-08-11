@@ -70,7 +70,7 @@ jobs:
 
       - name: Code complexity check
         run: |
-          radon cc -a $(git ls-files '*.py' | grep -v 'pb2') > cc_report.txt # exclude generated protobuf files
+          radon cc -a $(git ls-files '*.py' | grep -v 'tetragon/proto') > cc_report.txt # exclude generated protobuf files
           cat cc_report.txt
           if grep -qE ' - [CDEF]$' cc_report.txt; then
             echo "❌ Complexity too high!"
@@ -85,7 +85,7 @@ jobs:
           
           # Generate report with the maintainability indexes for each Python file
           MI_REPORT=mi_report.txt
-          radon mi -s $(git ls-files '*.py' | grep -v 'pb2') > "$MI_REPORT" # exclude generated protobuf files
+          radon mi -s $(git ls-files '*.py' | grep -v 'tetragon/proto') > "$MI_REPORT" # exclude generated protobuf files
 
           # Check if any Python file has a maintainability index below the threshold
           awk -v min="$MIN_MAINTAINABILITY" '
