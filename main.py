@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 import socket
 import signal
 import logging
@@ -14,7 +15,6 @@ MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
 
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
-    # check system requirements
     if not ARGOS_NTFY_TOPIC:
         logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
         sys.exit(1)
@@ -33,21 +33,24 @@ def main() -> None:
     with TetragonMonitor() as monitor:
         while running:
             pid, syscall_id = monitor.get_next_syscall()
-            logging.debug(f"PID: {pid}, syscall_id: {syscall_id}")
+            if pid is None or syscall_id is None:
+                logging.info("No new syscalls to analyze. Sleeping for a few moments...")
+                time.sleep(3)
+                continue
+            logging.debug(f"Received - PID: {pid}, syscall_id: {syscall_id}")
 
             # TODO: Classify syscall sequences received from Tetragon
             malicious = False
-            if not malicious:
-                continue
-
-            logging.warning(f"Malicious syscall detected from PID {pid}")
-            notify_push(
-                topic=ARGOS_NTFY_TOPIC,
-                message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
-                title=f"Intrusion Alert for {MACHINE_NAME}",
-                tags=["warning"],
-                priority=Priority.MAX
-            )
+            if malicious:            
+                logging.warning(f"Malicious syscall sequence detected from PID {pid}.")
+                logging.info("Sending intrusion detection notification.")
+                notify_push(
+                    topic=ARGOS_NTFY_TOPIC,
+                    message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
+                    title=f"Intrusion Alert for {MACHINE_NAME}",
+                    tags=["warning"],
+                    priority=Priority.MAX
+                )
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="ARGOS HIDS")
