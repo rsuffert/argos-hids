@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-from tetragon.proto import events_pb2 as tetragon_dot_events__pb2
-from tetragon.proto import sensors_pb2 as tetragon_dot_sensors__pb2
-from tetragon.proto import tetragon_pb2 as tetragon_dot_tetragon__pb2
+from tetragon.proto import events_pb2 as tetragon_dot_proto_dot_events__pb2
+from tetragon.proto import sensors_pb2 as tetragon_dot_proto_dot_sensors__pb2
+from tetragon.proto import tetragon_pb2 as tetragon_dot_proto_dot_tetragon__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__
@@ -20,7 +20,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in tetragon/sensors_pb2_grpc.py depends on'
+        + f' but the generated code in tetragon/proto/sensors_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -38,88 +38,88 @@ class FineGuidanceSensorsStub(object):
         """
         self.GetEvents = channel.unary_stream(
                 '/tetragon.FineGuidanceSensors/GetEvents',
-                request_serializer=tetragon_dot_events__pb2.GetEventsRequest.SerializeToString,
-                response_deserializer=tetragon_dot_events__pb2.GetEventsResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_events__pb2.GetEventsRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_events__pb2.GetEventsResponse.FromString,
                 _registered_method=True)
         self.GetHealth = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/GetHealth',
-                request_serializer=tetragon_dot_tetragon__pb2.GetHealthStatusRequest.SerializeToString,
-                response_deserializer=tetragon_dot_tetragon__pb2.GetHealthStatusResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusResponse.FromString,
                 _registered_method=True)
         self.AddTracingPolicy = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/AddTracingPolicy',
-                request_serializer=tetragon_dot_sensors__pb2.AddTracingPolicyRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.AddTracingPolicyResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyResponse.FromString,
                 _registered_method=True)
         self.DeleteTracingPolicy = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/DeleteTracingPolicy',
-                request_serializer=tetragon_dot_sensors__pb2.DeleteTracingPolicyRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.DeleteTracingPolicyResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyResponse.FromString,
                 _registered_method=True)
         self.ListTracingPolicies = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/ListTracingPolicies',
-                request_serializer=tetragon_dot_sensors__pb2.ListTracingPoliciesRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.ListTracingPoliciesResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesResponse.FromString,
                 _registered_method=True)
         self.ConfigureTracingPolicy = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/ConfigureTracingPolicy',
-                request_serializer=tetragon_dot_sensors__pb2.ConfigureTracingPolicyRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.ConfigureTracingPolicyResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyResponse.FromString,
                 _registered_method=True)
         self.EnableTracingPolicy = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/EnableTracingPolicy',
-                request_serializer=tetragon_dot_sensors__pb2.EnableTracingPolicyRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.EnableTracingPolicyResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyResponse.FromString,
                 _registered_method=True)
         self.DisableTracingPolicy = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/DisableTracingPolicy',
-                request_serializer=tetragon_dot_sensors__pb2.DisableTracingPolicyRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.DisableTracingPolicyResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyResponse.FromString,
                 _registered_method=True)
         self.ListSensors = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/ListSensors',
-                request_serializer=tetragon_dot_sensors__pb2.ListSensorsRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.ListSensorsResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.ListSensorsRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.ListSensorsResponse.FromString,
                 _registered_method=True)
         self.EnableSensor = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/EnableSensor',
-                request_serializer=tetragon_dot_sensors__pb2.EnableSensorRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.EnableSensorResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.EnableSensorRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.EnableSensorResponse.FromString,
                 _registered_method=True)
         self.DisableSensor = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/DisableSensor',
-                request_serializer=tetragon_dot_sensors__pb2.DisableSensorRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.DisableSensorResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.DisableSensorRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.DisableSensorResponse.FromString,
                 _registered_method=True)
         self.RemoveSensor = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/RemoveSensor',
-                request_serializer=tetragon_dot_sensors__pb2.RemoveSensorRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.RemoveSensorResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.RemoveSensorRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.RemoveSensorResponse.FromString,
                 _registered_method=True)
         self.GetStackTraceTree = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/GetStackTraceTree',
-                request_serializer=tetragon_dot_sensors__pb2.GetStackTraceTreeRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.GetStackTraceTreeResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeResponse.FromString,
                 _registered_method=True)
         self.GetVersion = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/GetVersion',
-                request_serializer=tetragon_dot_sensors__pb2.GetVersionRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.GetVersionResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.GetVersionRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetVersionResponse.FromString,
                 _registered_method=True)
         self.RuntimeHook = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/RuntimeHook',
-                request_serializer=tetragon_dot_tetragon__pb2.RuntimeHookRequest.SerializeToString,
-                response_deserializer=tetragon_dot_tetragon__pb2.RuntimeHookResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookResponse.FromString,
                 _registered_method=True)
         self.GetDebug = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/GetDebug',
-                request_serializer=tetragon_dot_sensors__pb2.GetDebugRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.GetDebugResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.GetDebugRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetDebugResponse.FromString,
                 _registered_method=True)
         self.SetDebug = channel.unary_unary(
                 '/tetragon.FineGuidanceSensors/SetDebug',
-                request_serializer=tetragon_dot_sensors__pb2.SetDebugRequest.SerializeToString,
-                response_deserializer=tetragon_dot_sensors__pb2.SetDebugResponse.FromString,
+                request_serializer=tetragon_dot_proto_dot_sensors__pb2.SetDebugRequest.SerializeToString,
+                response_deserializer=tetragon_dot_proto_dot_sensors__pb2.SetDebugResponse.FromString,
                 _registered_method=True)
 
 
@@ -239,88 +239,88 @@ def add_FineGuidanceSensorsServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetEvents': grpc.unary_stream_rpc_method_handler(
                     servicer.GetEvents,
-                    request_deserializer=tetragon_dot_events__pb2.GetEventsRequest.FromString,
-                    response_serializer=tetragon_dot_events__pb2.GetEventsResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_events__pb2.GetEventsRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_events__pb2.GetEventsResponse.SerializeToString,
             ),
             'GetHealth': grpc.unary_unary_rpc_method_handler(
                     servicer.GetHealth,
-                    request_deserializer=tetragon_dot_tetragon__pb2.GetHealthStatusRequest.FromString,
-                    response_serializer=tetragon_dot_tetragon__pb2.GetHealthStatusResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusResponse.SerializeToString,
             ),
             'AddTracingPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.AddTracingPolicy,
-                    request_deserializer=tetragon_dot_sensors__pb2.AddTracingPolicyRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.AddTracingPolicyResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyResponse.SerializeToString,
             ),
             'DeleteTracingPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteTracingPolicy,
-                    request_deserializer=tetragon_dot_sensors__pb2.DeleteTracingPolicyRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.DeleteTracingPolicyResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyResponse.SerializeToString,
             ),
             'ListTracingPolicies': grpc.unary_unary_rpc_method_handler(
                     servicer.ListTracingPolicies,
-                    request_deserializer=tetragon_dot_sensors__pb2.ListTracingPoliciesRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.ListTracingPoliciesResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesResponse.SerializeToString,
             ),
             'ConfigureTracingPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.ConfigureTracingPolicy,
-                    request_deserializer=tetragon_dot_sensors__pb2.ConfigureTracingPolicyRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.ConfigureTracingPolicyResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyResponse.SerializeToString,
             ),
             'EnableTracingPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.EnableTracingPolicy,
-                    request_deserializer=tetragon_dot_sensors__pb2.EnableTracingPolicyRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.EnableTracingPolicyResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyResponse.SerializeToString,
             ),
             'DisableTracingPolicy': grpc.unary_unary_rpc_method_handler(
                     servicer.DisableTracingPolicy,
-                    request_deserializer=tetragon_dot_sensors__pb2.DisableTracingPolicyRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.DisableTracingPolicyResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyResponse.SerializeToString,
             ),
             'ListSensors': grpc.unary_unary_rpc_method_handler(
                     servicer.ListSensors,
-                    request_deserializer=tetragon_dot_sensors__pb2.ListSensorsRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.ListSensorsResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.ListSensorsRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.ListSensorsResponse.SerializeToString,
             ),
             'EnableSensor': grpc.unary_unary_rpc_method_handler(
                     servicer.EnableSensor,
-                    request_deserializer=tetragon_dot_sensors__pb2.EnableSensorRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.EnableSensorResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.EnableSensorRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.EnableSensorResponse.SerializeToString,
             ),
             'DisableSensor': grpc.unary_unary_rpc_method_handler(
                     servicer.DisableSensor,
-                    request_deserializer=tetragon_dot_sensors__pb2.DisableSensorRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.DisableSensorResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.DisableSensorRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.DisableSensorResponse.SerializeToString,
             ),
             'RemoveSensor': grpc.unary_unary_rpc_method_handler(
                     servicer.RemoveSensor,
-                    request_deserializer=tetragon_dot_sensors__pb2.RemoveSensorRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.RemoveSensorResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.RemoveSensorRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.RemoveSensorResponse.SerializeToString,
             ),
             'GetStackTraceTree': grpc.unary_unary_rpc_method_handler(
                     servicer.GetStackTraceTree,
-                    request_deserializer=tetragon_dot_sensors__pb2.GetStackTraceTreeRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.GetStackTraceTreeResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeResponse.SerializeToString,
             ),
             'GetVersion': grpc.unary_unary_rpc_method_handler(
                     servicer.GetVersion,
-                    request_deserializer=tetragon_dot_sensors__pb2.GetVersionRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.GetVersionResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetVersionRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.GetVersionResponse.SerializeToString,
             ),
             'RuntimeHook': grpc.unary_unary_rpc_method_handler(
                     servicer.RuntimeHook,
-                    request_deserializer=tetragon_dot_tetragon__pb2.RuntimeHookRequest.FromString,
-                    response_serializer=tetragon_dot_tetragon__pb2.RuntimeHookResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookResponse.SerializeToString,
             ),
             'GetDebug': grpc.unary_unary_rpc_method_handler(
                     servicer.GetDebug,
-                    request_deserializer=tetragon_dot_sensors__pb2.GetDebugRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.GetDebugResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.GetDebugRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.GetDebugResponse.SerializeToString,
             ),
             'SetDebug': grpc.unary_unary_rpc_method_handler(
                     servicer.SetDebug,
-                    request_deserializer=tetragon_dot_sensors__pb2.SetDebugRequest.FromString,
-                    response_serializer=tetragon_dot_sensors__pb2.SetDebugResponse.SerializeToString,
+                    request_deserializer=tetragon_dot_proto_dot_sensors__pb2.SetDebugRequest.FromString,
+                    response_serializer=tetragon_dot_proto_dot_sensors__pb2.SetDebugResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -348,8 +348,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/GetEvents',
-            tetragon_dot_events__pb2.GetEventsRequest.SerializeToString,
-            tetragon_dot_events__pb2.GetEventsResponse.FromString,
+            tetragon_dot_proto_dot_events__pb2.GetEventsRequest.SerializeToString,
+            tetragon_dot_proto_dot_events__pb2.GetEventsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -375,8 +375,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/GetHealth',
-            tetragon_dot_tetragon__pb2.GetHealthStatusRequest.SerializeToString,
-            tetragon_dot_tetragon__pb2.GetHealthStatusResponse.FromString,
+            tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusRequest.SerializeToString,
+            tetragon_dot_proto_dot_tetragon__pb2.GetHealthStatusResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -402,8 +402,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/AddTracingPolicy',
-            tetragon_dot_sensors__pb2.AddTracingPolicyRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.AddTracingPolicyResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.AddTracingPolicyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -429,8 +429,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/DeleteTracingPolicy',
-            tetragon_dot_sensors__pb2.DeleteTracingPolicyRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.DeleteTracingPolicyResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.DeleteTracingPolicyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -456,8 +456,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/ListTracingPolicies',
-            tetragon_dot_sensors__pb2.ListTracingPoliciesRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.ListTracingPoliciesResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.ListTracingPoliciesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -483,8 +483,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/ConfigureTracingPolicy',
-            tetragon_dot_sensors__pb2.ConfigureTracingPolicyRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.ConfigureTracingPolicyResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.ConfigureTracingPolicyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -510,8 +510,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/EnableTracingPolicy',
-            tetragon_dot_sensors__pb2.EnableTracingPolicyRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.EnableTracingPolicyResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.EnableTracingPolicyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -537,8 +537,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/DisableTracingPolicy',
-            tetragon_dot_sensors__pb2.DisableTracingPolicyRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.DisableTracingPolicyResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.DisableTracingPolicyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -564,8 +564,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/ListSensors',
-            tetragon_dot_sensors__pb2.ListSensorsRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.ListSensorsResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.ListSensorsRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.ListSensorsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -591,8 +591,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/EnableSensor',
-            tetragon_dot_sensors__pb2.EnableSensorRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.EnableSensorResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.EnableSensorRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.EnableSensorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -618,8 +618,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/DisableSensor',
-            tetragon_dot_sensors__pb2.DisableSensorRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.DisableSensorResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.DisableSensorRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.DisableSensorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -645,8 +645,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/RemoveSensor',
-            tetragon_dot_sensors__pb2.RemoveSensorRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.RemoveSensorResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.RemoveSensorRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.RemoveSensorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -672,8 +672,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/GetStackTraceTree',
-            tetragon_dot_sensors__pb2.GetStackTraceTreeRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.GetStackTraceTreeResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.GetStackTraceTreeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -699,8 +699,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/GetVersion',
-            tetragon_dot_sensors__pb2.GetVersionRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.GetVersionResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.GetVersionRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.GetVersionResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -726,8 +726,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/RuntimeHook',
-            tetragon_dot_tetragon__pb2.RuntimeHookRequest.SerializeToString,
-            tetragon_dot_tetragon__pb2.RuntimeHookResponse.FromString,
+            tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookRequest.SerializeToString,
+            tetragon_dot_proto_dot_tetragon__pb2.RuntimeHookResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -753,8 +753,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/GetDebug',
-            tetragon_dot_sensors__pb2.GetDebugRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.GetDebugResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.GetDebugRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.GetDebugResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -780,8 +780,8 @@ class FineGuidanceSensors(object):
             request,
             target,
             '/tetragon.FineGuidanceSensors/SetDebug',
-            tetragon_dot_sensors__pb2.SetDebugRequest.SerializeToString,
-            tetragon_dot_sensors__pb2.SetDebugResponse.FromString,
+            tetragon_dot_proto_dot_sensors__pb2.SetDebugRequest.SerializeToString,
+            tetragon_dot_proto_dot_sensors__pb2.SetDebugResponse.FromString,
             options,
             channel_credentials,
             insecure,
