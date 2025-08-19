@@ -1491,6 +1491,18 @@ files = [
 ]
 
 [[package]]
+name = "pyseccomp"
+version = "0.1.2"
+description = "An interface to libseccomp using ctypes. API compatible with libseccomp's Python bindings."
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "pyseccomp-0.1.2-py3-none-any.whl", hash = "sha256:19177748e1202603ca4b2c41d728916402c018c4fee49dca1e3568ea218b7c23"},
+    {file = "pyseccomp-0.1.2.tar.gz", hash = "sha256:0d54efacf71bda4bdfd21233f5444b730cbecf593d602f796e6412a8682258bd"},
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 description = "Extensions to the standard Python datetime module"
@@ -1987,4 +1999,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "24f0024ff77fc5c9274c5ccc193512c7d75a12a82476a3144118fa733508b859"
+content-hash = "23dcae48d2d75b7a9682cc1481c08a90dfbd44a84500863ad2c3e90e64e98762"

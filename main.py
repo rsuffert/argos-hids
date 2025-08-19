@@ -32,12 +32,12 @@ def main() -> None:
     # start monitoring and classifying syscalls
     with TetragonMonitor() as monitor:
         while running:
-            pid, syscall_id = monitor.get_next_syscall()
-            if pid is None or syscall_id is None:
+            pid, syscall = monitor.get_next_syscall_name()
+            if pid is None or syscall is None:
                 logging.info("No new syscalls to analyze. Sleeping for a few moments...")
                 time.sleep(3)
                 continue
-            logging.debug(f"Received - PID: {pid}, syscall_id: {syscall_id}")
+            logging.debug(f"Received - PID: {pid}, syscall_id: {syscall}")
 
             # TODO: Classify syscall sequences received from Tetragon
             malicious = False
