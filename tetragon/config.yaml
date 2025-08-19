@@ -1,3 +1,5 @@
+# Extracted from: https://tetragon.io/docs/concepts/tracing-policy/hooks/#tracepoints
+
 apiVersion: cilium.io/v1alpha1
 kind: TracingPolicy
 metadata:
