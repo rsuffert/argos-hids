@@ -79,8 +79,14 @@ class TetragonMonitor:
         pid, syscall_id = self.get_next_syscall_id()
         if pid is None or syscall_id is None:
             return None, None
-        # convert the syscall ID returned by Tetragon to the corresponding syscall name for this arch
-        syscall_name_bytes = sc.resolve_syscall(sc.Arch.NATIVE, syscall_id)
+
+        try:
+            # convert the syscall ID returned by Tetragon to the corresponding syscall name for this arch
+            syscall_name_bytes = sc.resolve_syscall(sc.Arch.NATIVE, syscall_id)
+        except ValueError:
+            # unknown syscall ID
+            return pid, None
+        
         return pid, syscall_name_bytes.decode()
 
     def __enter__(self) -> "TetragonMonitor":
