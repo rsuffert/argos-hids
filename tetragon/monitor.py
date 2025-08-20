@@ -9,6 +9,7 @@ import time
 import os
 import shutil
 import grpc
+import pyseccomp as sc
 from tetragon.proto.sensors_pb2_grpc import FineGuidanceSensorsStub
 from tetragon.proto.events_pb2 import GetEventsRequest # type: ignore[attr-defined] # mypy struggles with protobuf-generated code
 
@@ -50,9 +51,9 @@ class TetragonMonitor:
         subprocess.run(["sudo", "systemctl", "start", "tetragon"], check=True)
         time.sleep(3) # give Tetragon time to start
 
-    def get_next_syscall(self) -> Tuple[Optional[int], Optional[int]]:
+    def get_next_syscall_id(self) -> Tuple[Optional[int], Optional[int]]:
         """
-        Retrieve the next syscall for the monitored process.
+        Retrieve the next syscall ID that happened on the system.
 
         Returns:
             Tuple[Optional[int], Optional[int]]: A tuple containing the PID and syscall ID.
@@ -67,6 +68,26 @@ class TetragonMonitor:
             return pid, syscall_id
         except StopIteration:
             return None, None
+    
+    def get_next_syscall_name(self) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Retrieve the next syscall name that happened on the system.
+
+        Returns:
+            Tuple[Optional[int], Optional[str]]: A tuple containing the PID and syscall name.
+        """
+        pid, syscall_id = self.get_next_syscall_id()
+        if pid is None or syscall_id is None:
+            return None, None
+
+        try:
+            # convert the syscall ID returned by Tetragon to the corresponding syscall name for this arch
+            syscall_name_bytes = sc.resolve_syscall(sc.Arch.NATIVE, syscall_id)
+        except ValueError:
+            # unknown syscall ID
+            return pid, None
+        
+        return pid, syscall_name_bytes.decode()
 
     def __enter__(self) -> "TetragonMonitor":
         """Context manager entry method."""
@@ -81,5 +102,5 @@ class TetragonMonitor:
 if __name__ == "__main__":
     with TetragonMonitor() as monitor:
         while True:
-            pid, syscall_id = monitor.get_next_syscall()
-            print(f"PID: {pid}, syscall_id: {syscall_id}")
+            pid, syscall = monitor.get_next_syscall_name()
+            print(f"PID: {pid}, syscall_id: {syscall}")

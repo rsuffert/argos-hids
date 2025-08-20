@@ -45,7 +45,8 @@ dependencies = [
     "torchmetrics (==1.7.3)",
     "requests (==2.32.3)",
     "grpcio (>=1.74.0,<2.0.0)",
-    "grpcio-tools (>=1.74.0,<2.0.0)"
+    "grpcio-tools (>=1.74.0,<2.0.0)",
+    "pyseccomp (>=0.1.2,<0.2.0)"
 ]
 
 [tool.poetry]
