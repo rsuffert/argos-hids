@@ -22,7 +22,7 @@ class TetragonMonitor:
     """Class to manage Tetragon syscall monitoring."""
 
     def __init__(self) -> None:
-        """Initialize the Tetragon monitor with a configuration path."""
+        """Initialize the Tetragon monitor."""
         self._config_path = CONFIG_FILE_PATH
         self._tetragon_bin = TETRAGON_BIN
         self._tetragon_config_dir = TETRAGON_CONFIG_DIR

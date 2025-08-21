@@ -7,7 +7,7 @@ This folder contains scripts and resources for pre-processing the DongTing datas
 1. **Install dependencies**
      Ensure you have Python 3.x and required packages installed. You can install dependencies with:
     ```bash
-    pip install -r requirements.txt
+    poetry install
     ```
 
 2. **Set required environment variables**
@@ -22,5 +22,5 @@ This folder contains scripts and resources for pre-processing the DongTing datas
 3. **Run the dataset loader/pre-processing script**
     After running the script with the below command, a `.h5` compressed file will be created with the syscall sequences for each label-split pair of the DongTing dataset. These can then be loaded to train the intrusion detection model.
     ```bash
-    python loader.py
+    poetry run python3 loader.py
     ```

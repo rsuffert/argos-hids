@@ -29,11 +29,11 @@ poetry install
 Then, run the system with:
 
 ```bash
-sudo -E $(poetry run which python) -m main
+sudo -E $(poetry run which python3) -m main
 ```
 
 Or, to see what command-line flags can be supplied:
 
 ```bash
-poetry run python main.py --help
+poetry run python3 main.py --help
 ```

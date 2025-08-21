@@ -10,7 +10,7 @@ This folder contains the implementation and related files for the LSTM (Long Sho
 
 1. **Install dependencies:**
     ```bash
-    pip install -r requirements.txt
+    poetry install
     ```
 
 2. **Set required environment variables**
@@ -25,7 +25,7 @@ This folder contains the implementation and related files for the LSTM (Long Sho
 
 3. **Train the model:**
     ```bash
-    python trainer.py
+    poetry run python3 trainer.py
     ```
 
 The trainer script will take care of automatically saving the model of the best epoch (according to F1 score on the validation set) to the `./lightning_logs/version_X` folder for each execution of the trainer script.
