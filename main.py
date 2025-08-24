@@ -41,13 +41,10 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_signal) # ctrl+c
     signal.signal(signal.SIGTERM, handle_signal) # kill
 
-    # TODO: load syscall names to IDs mapping used during training
-    syscall_names_to_ids: Dict[str, int] = defaultdict(lambda: -1)
-
-    model, device = instantiate_model()
-
     with TetragonMonitor() as monitor:
+        model, device = instantiate_model()
         pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
+        syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping()
         while running:
             pid, syscall = monitor.get_next_syscall_name()
             if pid is None or syscall is None:
@@ -74,6 +71,18 @@ def main() -> None:
                     tags=["warning"],
                     priority=Priority.MAX
                 )
+
+def load_syscalls_names_to_ids_mapping() -> Dict[str, int]:
+    """
+    Load the mapping of syscall names to their IDs. The mapping should be te same used
+    for training, as this is the mapping that will be applied to the collected syscall
+    sequences before being passed on to the model for classification.
+
+    Returns:
+        Dict[str, int]: A dictionary mapping syscall names to their IDs.
+    """
+    # TODO: implement this function
+    return defaultdict(lambda: -1)
 
 def instantiate_model() -> Tuple[LSTMClassifier, str]:
     """
