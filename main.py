@@ -72,6 +72,9 @@ def main() -> None:
                     tags=["warning"],
                     priority=Priority.MAX
                 )
+            
+            # remove analyzed syscalls from the list
+            pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
 
 def load_syscalls_names_to_ids_mapping() -> Dict[str, int]:
     """
