@@ -8,6 +8,7 @@ import socket
 import signal
 import logging
 from argparse import ArgumentParser
+from collections import defaultdict
 from typing import Dict, List, Tuple
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
@@ -42,7 +43,7 @@ def main() -> None:
 
     with TetragonMonitor() as monitor:
         model, device = instantiate_model()
-        pids_to_syscalls: Dict[int, List[int]] = {}
+        pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
         syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping()
         while running:
             pid, syscall = monitor.get_next_syscall_name()
@@ -50,15 +51,16 @@ def main() -> None:
                 logging.info("No new syscalls to analyze. Sleeping for a few moments...")
                 time.sleep(3)
                 continue
-            logging.debug(f"Received - PID: {pid}, syscall_id: {syscall}")
+            logging.debug(f"Received - PID: {pid}, syscall: {syscall}")
 
             pids_to_syscalls[pid].append(syscall_names_to_ids.get(syscall, -1))
-            syscalls_from_current_pid = pids_to_syscalls.get(pid, [])
+            syscalls_from_current_pid = pids_to_syscalls[pid]
             if len(syscalls_from_current_pid) < MAX_SEQ_LEN:
                 # this sequence has not reached the classification threshold yet,
                 # so we wait until it's long enough
                 continue
-
+            
+            logging.debug(f"Classifying sequence from PID {pid}")
             malicious = classify_syscall_sequence(model, device, syscalls_from_current_pid)
             if malicious:
                 logging.warning(f"Malicious syscall sequence detected from PID {pid}.")
@@ -109,7 +111,7 @@ def classify_syscall_sequence(model: LSTMClassifier, device: str, sequence: List
     Returns:
         bool: True if the sequence is classified as malicious; False otherwise.
     """
-    sequences_tensor = torch.tensor(sequence, dtype=torch.long).unsqueeze(0).to(device)
+    sequences_tensor = torch.tensor(sequence, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(device)
     lengths_tensor = torch.tensor([MAX_SEQ_LEN], dtype=torch.long).to(device)
     with torch.no_grad():
         outputs = model(sequences_tensor, lengths_tensor)
