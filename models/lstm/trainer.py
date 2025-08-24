@@ -69,11 +69,11 @@ def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor, Tensor
 @dataclass
 class LSTMConfig:
     """Configuration for the LSTM classifier."""
-    input_size: int
-    hidden_size: int
-    num_layers: int
-    num_classes: int
-    lr: float
+    input_size: int = INPUT_SIZE
+    hidden_size: int = HIDDEN_SIZE
+    num_layers: int = NUM_LAYERS
+    num_classes: int = NUM_CLASSES
+    lr: float = LEARNING_RATE
 
 class LSTMClassifier(pl.LightningModule):
     """LSTM-based classifier using PyTorch Lightning."""
@@ -214,13 +214,7 @@ def main() -> None:
     )
 
     # Initialize the LSTM model instance with the specified configurations
-    model = LSTMClassifier(LSTMConfig(
-        input_size=INPUT_SIZE,
-        hidden_size=HIDDEN_SIZE,
-        num_layers=NUM_LAYERS,
-        num_classes=NUM_CLASSES,
-        lr=LEARNING_RATE
-    ))
+    model = LSTMClassifier(LSTMConfig())
 
     # Define callbacks to customize training behavior
     checkpoint_callback = pl.callbacks.ModelCheckpoint(

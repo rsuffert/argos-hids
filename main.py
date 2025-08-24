@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 from typing import Dict, List, Tuple
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
-from models.lstm.trainer import LSTMClassifier, MAX_SEQ_LEN
+from models.lstm.trainer import LSTMClassifier, LSTMConfig, MAX_SEQ_LEN
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
@@ -90,7 +90,8 @@ def instantiate_model() -> Tuple[LSTMClassifier, str]:
     Returns:
         Tuple[LSTMClassifier, str]: The instantiated model and the device it is running on.
     """
-    model = LSTMClassifier.load_from_checkpoint(TRAINED_MODEL_PATH)
+    config = LSTMConfig()
+    model = LSTMClassifier.load_from_checkpoint(TRAINED_MODEL_PATH, config=config)
     model.eval()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
