@@ -7,9 +7,8 @@ import torch
 import socket
 import signal
 import logging
-from typing import Dict, List, Tuple
-from collections import defaultdict
 from argparse import ArgumentParser
+from typing import Dict, List, Tuple
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.lstm.trainer import LSTMClassifier, MAX_SEQ_LEN
@@ -43,7 +42,7 @@ def main() -> None:
 
     with TetragonMonitor() as monitor:
         model, device = instantiate_model()
-        pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
+        pids_to_syscalls: Dict[int, List[int]] = {}
         syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping()
         while running:
             pid, syscall = monitor.get_next_syscall_name()
@@ -53,8 +52,8 @@ def main() -> None:
                 continue
             logging.debug(f"Received - PID: {pid}, syscall_id: {syscall}")
 
-            pids_to_syscalls[pid].append(syscall_names_to_ids[syscall])
-            syscalls_from_current_pid = pids_to_syscalls[pid]
+            pids_to_syscalls[pid].append(syscall_names_to_ids.get(syscall, -1))
+            syscalls_from_current_pid = pids_to_syscalls.get(pid, [])
             if len(syscalls_from_current_pid) < MAX_SEQ_LEN:
                 # this sequence has not reached the classification threshold yet,
                 # so we wait until it's long enough
@@ -82,7 +81,7 @@ def load_syscalls_names_to_ids_mapping() -> Dict[str, int]:
         Dict[str, int]: A dictionary mapping syscall names to their IDs.
     """
     # TODO: implement this function
-    return defaultdict(lambda: -1)
+    return {}
 
 def instantiate_model() -> Tuple[LSTMClassifier, str]:
     """
