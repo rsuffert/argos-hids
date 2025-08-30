@@ -128,7 +128,7 @@ def parse_syscall_file(zf: zipfile.ZipFile, path: str) -> List[Tuple[int, str]]:
     parsed = []
     for line in lines:
         try:
-            timestamp = int(str(line.split()[0].decode()).split(".")[0])
+            timestamp = int(line.split()[0].decode().split(".")[0])
             syscall_name = line.split()[5].decode()
             parsed.append((timestamp, syscall_name))
         except (IndexError, UnicodeDecodeError):
