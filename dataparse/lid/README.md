@@ -6,27 +6,27 @@ A pipeline for converting LID-DS syscall datasets into ML-ready HDF5 format. Thi
 
 Considering your current working directory is the directory where this README file is located.
 
-1. **Install dependencies**
-     Ensure you have Python 3.x and required packages installed. You can install dependencies with:
-    ```bash
-    pip install -r requirements.txt
-    ```
+1. **Dependencies**
+     Ensure you have Python 3.x. Dependencies are managed with poetry, run the following command
+   ```bash
+   poetry install
+   ```
 
-2. **Set required environment variables**
-    The following environment variables must be set so the script finds the required DongTing dataset files:
+3. **Set required environment variables**
+    The following environment variables must be set so the script finds the required LID dataset files:
     ```bash
-    # Directory where the LID discompressed scenarios directories are and where the preprocessed .h5 files will be stored
+    # Directory where the LID scenarios directories are and where the preprocessed .h5 files will be stored
     export LID_DATA_DIR=<path>
     ```
 
-3. **Add the DongTing module to `PYTHONPATH`**
+4. **Add the DongTing module to `PYTHONPATH`**
     This module imports functions from the DongTing module, so we need to tell Python where to find it.
     ```bash
     export PYTHONPATH=$(pwd)/../..
     ```
 
-4. **Run the dataset loader/pre-processing script**
+5. **Run the dataset loader/pre-processing script**
     After running the script with the below command, a `.h5` compressed file will be created with the syscall sequences for each label-split pair of the LID-DS dataset under the directory you set for `LID_DATA_DIR`. These can then be loaded to train the intrusion detection model. And a .pkl file will be created with the syscalls collected from the `LID_DATA_DIR`.
     ```bash
-    python loader.py
+    poetry run python loader.py
     ```
