@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import logging
 import pickle
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 import zipfile
 import json
 from dataparse.dongting import append_seq_to_h5
@@ -77,6 +77,99 @@ def get_split_from_path(path: str) -> str:
             return split
     return "training"
 
+def extract_metadata_from_zip(zf: zipfile.ZipFile, path: str) -> Tuple[int, Optional[int]]:
+    """
+    Extract label and attack timestamp from ZIP metadata.
+    
+    Args:
+        zf: Open ZipFile object
+        path: ZIP file path for logging
+        
+    Returns:
+        Tuple[int, Optional[int]]: (label, attack_timestamp)
+    """
+    metadata_files = [f for f in zf.namelist() if f.endswith(".json")]
+    if not metadata_files:
+        logging.warning(f"No metadata files found in zip: {path}")
+        return -1, None
+        
+    with zf.open(metadata_files[0]) as mf:
+        metadata = json.load(mf)
+        
+    label = 1 if metadata.get("exploit") else 0
+    attack_ts = None
+    
+    if label:
+        exploit_info = metadata.get("time", {}).get("exploit", [])
+        if exploit_info and "absolute" in exploit_info[0]:
+            attack_ts = int(str(exploit_info[0]["absolute"]).split(".")[0])
+            
+    return label, attack_ts
+
+def parse_syscall_file(zf: zipfile.ZipFile, path: str) -> List[Tuple[int, str]]:
+    """
+    Parse syscall file and return list of (timestamp, syscall_name) tuples.
+    
+    Args:
+        zf: Open ZipFile object
+        path: ZIP file path for logging
+        
+    Returns:
+        List[Tuple[int, str]]: List of (timestamp, syscall_name) pairs
+    """
+    syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
+    if not syscall_files:
+        logging.warning(f"No syscall files found in zip: {path}")
+        return []
+        
+    with zf.open(syscall_files[0]) as sf:
+        lines = sf.readlines()
+        
+    parsed = []
+    for line in lines:
+        try:
+            timestamp = int(str(line.split()[0].decode()).split(".")[0])
+            syscall_name = line.split()[5].decode()
+            parsed.append((timestamp, syscall_name))
+        except (IndexError, UnicodeDecodeError):
+            continue
+            
+    return parsed
+
+def select_window_sequence(
+    parsed: List[Tuple[int, str]], label: int, attack_ts: Optional[int]
+) -> List[Tuple[int, str]]:
+    """
+    Select appropriate window sequence based on label and attack timestamp.
+    
+    Args:
+        parsed: List of (timestamp, syscall_name) pairs
+        label: 1 for attack, 0 for normal
+        attack_ts: Attack timestamp (None if not available)
+        
+    Returns:
+        List[Tuple[int, str]]: Selected window sequence
+    """
+    if label and attack_ts:
+        for idx, (ts, _name) in enumerate(parsed):
+            if ts >= attack_ts:
+                return parsed[idx:idx+WINDOW_SIZE]
+        return []
+    return parsed[:WINDOW_SIZE]
+
+def convert_to_syscall_ids(window_seq: List[Tuple[int, str]], syscall_dict: Dict[str, int]) -> List[int]:
+    """
+    Convert syscall names to IDs using dictionary.
+    
+    Args:
+        window_seq: List of (timestamp, syscall_name) pairs
+        syscall_dict: Dictionary mapping syscall names to IDs
+        
+    Returns:
+        List[int]: List of syscall IDs
+    """
+    return [get_or_add_syscall_id(name, syscall_dict) for _, name in window_seq]
+
 def extract_label_and_seq_from_zip(path: str, syscall_dict: Dict[str, int]) -> Tuple[int, List[int]]:
     """
     Extracts the label and sequence of system calls from a zip file.
@@ -88,48 +181,29 @@ def extract_label_and_seq_from_zip(path: str, syscall_dict: Dict[str, int]) -> T
     Returns:
         Tuple[int, List[int]]: A tuple containing the label (int) and a list of syscall IDs.
     """
-    label: int = -1
-    window_ids: List[int] = []
-
-    with zipfile.ZipFile(path, "r") as zf:
-        # Extract the label and exploit timestamp from the .json metadata file
-        metadata_files = [f for f in zf.namelist() if f.endswith(".json")]
-        if not metadata_files:
-            logging.warning(f"No metadata files found in zip: {path}")
-            return label, []
-        with zf.open(metadata_files[0]) as mf:
-            metadata = json.load(mf)
-        label = 1 if metadata.get("exploit") else 0
-        attack_ts = None
-        exploit_info = metadata.get("time", {}).get("exploit", [])
-        if label and exploit_info and "absolute" in exploit_info[0]:
-            attack_ts = int(str(exploit_info[0]["absolute"]).split(".")[0])
-
-        # Load and parse the syscall sequence from the .sc file
-        syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
-        if not syscall_files:
-            logging.warning(f"No syscall files found in zip: {path}")
-            return label, []
-        with zf.open(syscall_files[0]) as sf:
-            lines = sf.readlines()
-        # Parse: (timestamp, syscall_name)
-        parsed = [(int(str(line.split()[0].decode()).split(".")[0]), line.split()[5].decode()) for line in lines]
-
-        # Select window starting at attack timestamp
-        if label and attack_ts:
-            for idx, (ts, _name) in enumerate(parsed):
-                if ts >= attack_ts:
-                    window_seq = parsed[idx:idx+WINDOW_SIZE]
-                    break
-            else:
-                window_seq = []
-        else:
-            window_seq = parsed[:WINDOW_SIZE]
-
-        # Convert syscall names to IDs, creating new IDs as needed
-        window_ids = [get_or_add_syscall_id(name, syscall_dict) for _, name in window_seq]
-    
-    return label, window_ids
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            # Extract metadata
+            label, attack_ts = extract_metadata_from_zip(zf, path)
+            if label == -1:
+                return label, []
+                
+            # Parse syscall file
+            parsed = parse_syscall_file(zf, path)
+            if not parsed:
+                return label, []
+                
+            # Select window sequence
+            window_seq = select_window_sequence(parsed, label, attack_ts)
+            
+            # Convert to syscall IDs
+            window_ids = convert_to_syscall_ids(window_seq, syscall_dict)
+            
+        return label, window_ids
+        
+    except Exception as e:
+        logging.error(f"Error processing {path}: {e}")
+        return -1, []
 
 if __name__ == "__main__":
     logging.basicConfig(
