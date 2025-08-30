@@ -3,8 +3,6 @@ name: Validate Pull Request
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    branches:
-      - main
 
 jobs:
   pr-structure-validation:
@@ -97,8 +95,3 @@ jobs:
               }
               print "✅ " $1 " has maintainability index " m[1] " (minimum is " min ")"
           }' "$MI_REPORT"
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "This should run"
