@@ -242,5 +242,7 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
+    torch.save(model, "lstm.pt")
+
 if __name__ == "__main__":
     main()

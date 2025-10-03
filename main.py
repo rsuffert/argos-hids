@@ -3,16 +3,16 @@
 import os
 import sys
 import time
-import torch
 import socket
 import signal
 import logging
 from argparse import ArgumentParser
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
-from models.lstm.trainer import LSTMClassifier, LSTMConfig, MAX_SEQ_LEN
+from models.lstm.trainer import MAX_SEQ_LEN
+from models.inference import ModelSingleton
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
@@ -41,8 +41,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_signal) # ctrl+c
     signal.signal(signal.SIGTERM, handle_signal) # kill
 
+    ModelSingleton.instantiate(TRAINED_MODEL_PATH)
     with TetragonMonitor() as monitor:
-        model, device = instantiate_model()
         pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
         syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping()
         while running:
@@ -61,7 +61,7 @@ def main() -> None:
                 continue
             
             logging.debug(f"Classifying sequence from PID {pid}")
-            malicious = classify_syscall_sequence(model, device, syscalls_from_current_pid)
+            malicious = ModelSingleton.classify(syscalls_from_current_pid)
             if malicious:
                 logging.warning(f"Malicious syscall sequence detected from PID {pid}.")
                 logging.info("Sending intrusion detection notification.")
@@ -87,39 +87,6 @@ def load_syscalls_names_to_ids_mapping() -> Dict[str, int]:
     """
     # TODO: implement this function
     return {}
-
-def instantiate_model() -> Tuple[LSTMClassifier, str]:
-    """
-    Instantiate the LSTM model for intrusion detection.
-
-    Returns:
-        Tuple[LSTMClassifier, str]: The instantiated model and the device it is running on.
-    """
-    config = LSTMConfig()
-    model = LSTMClassifier.load_from_checkpoint(TRAINED_MODEL_PATH, config=config)
-    model.eval()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-    return model, device
-
-def classify_syscall_sequence(model: LSTMClassifier, device: str, sequence: List[int]) -> bool:
-    """
-    Classify a sequence of system calls as benign or malicious.
-    
-    Args:
-        model (LSTMClassifier): The LSTM model for classification.
-        device (str): The device to run the model on (e.g., "cuda" or "cpu").
-        sequence (List[int]): The sequence of system call IDs to classify.
-
-    Returns:
-        bool: True if the sequence is classified as malicious; False otherwise.
-    """
-    sequences_tensor = torch.tensor(sequence, dtype=torch.float32).unsqueeze(0).unsqueeze(-1).to(device)
-    lengths_tensor = torch.tensor([MAX_SEQ_LEN], dtype=torch.long).to(device)
-    with torch.no_grad():
-        outputs = model(sequences_tensor, lengths_tensor)
-    predicted_class = torch.argmax(outputs, dim=1).item()
-    return predicted_class == 1
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="ARGOS HIDS")
