@@ -242,8 +242,7 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
-    scripted = torch.jit.script(model)
-    scripted.save("lstm.pt")
+    torch.jit.script(model).save("lstm.pt")
 
 if __name__ == "__main__":
     main()
