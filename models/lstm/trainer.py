@@ -28,7 +28,7 @@ NUM_CLASSES = 2             # Output classes: normal or attack
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 10             # Number of training epochs
-MAX_SEQ_LEN = 512           # Maximum sequence length for padding/truncation
+MAX_SEQ_LEN = 2048          # Maximum sequence length for padding/truncation
 EARLY_STOP_PATIENCE = 3     # Patience for early stopping training
 EARLY_STOP_MIN_DELTA = 1e-3 # Minimum change to qualify as an improvement
 
@@ -241,6 +241,8 @@ def main() -> None:
         callbacks=[checkpoint_callback, early_stop_callback],
     )
     trainer.fit(model, train_loader, valid_loader)
+
+    torch.jit.script(model).save("lstm.pt")
 
 if __name__ == "__main__":
     main()
