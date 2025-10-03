@@ -16,16 +16,15 @@ from models.inference import ModelSingleton
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
-TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH",
-    os.path.join(
-        os.path.dirname(__file__), "models", "lstm", "lightning_logs", "version_0", "checkpoints", "best-val-f1.ckpt"
-    )
-)
+TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
     if not ARGOS_NTFY_TOPIC:
         logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
+        sys.exit(1)
+    if not TRAINED_MODEL_PATH:
+        logging.error("TRAINED_MODEL_PATH environment variable is not set.")
         sys.exit(1)
     if not os.path.exists(TRAINED_MODEL_PATH):
         logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")

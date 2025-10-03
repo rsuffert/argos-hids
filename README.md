@@ -26,7 +26,13 @@ First of all, install the dependencies with `poetry`:
 poetry install
 ```
 
-Then, run the system with:
+Then, set the environment variable `TRAINED_MODEL_PATH` to the PyTorch-saved `.pt` model file to be used to classify the syscall sequences happening on the host system.
+
+```bash
+export TRAINED_MODEL_PATH="<path>.pt"
+```
+
+Finally, run the system with:
 
 ```bash
 sudo -E $(poetry run which python3) -m main
