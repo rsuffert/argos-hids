@@ -25,7 +25,7 @@ class ModelSingleton:
             path (str): The path to the self-contained PyTorch model file to instantiate.
         """
         device = DeviceType.CUDA if torch.cuda.is_available() else DeviceType.CPU
-        model = torch.load(path, map_location=device.value)
+        model = torch.load(path, map_location=device.value, weights_only=False)
         model.eval()
         model.to(device.value)
         cls._instance = model
