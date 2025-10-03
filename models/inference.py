@@ -54,6 +54,9 @@ class ModelSingleton:
 
         Args:
             sequence(List[int]): The sanitized and ready-to-classify list of syscall IDs.
+
+        Returns:
+            bool: True if the sequence is classified as malicious, False otherwise.
         """
         model, device = cls.get()
         seq_tensor = (torch.tensor(sequence, dtype=torch.float32)
