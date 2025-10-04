@@ -110,7 +110,7 @@ def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
             reader = csv.reader(f)
             mapping = {row[0]: int(row[1]) for row in reader}
     except Exception as e:
-        raise Exception(f"Failed to parse syscall-to-ID mapping: {e}") from e
+        raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
     return mapping
 
 if __name__ == "__main__":
