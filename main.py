@@ -123,7 +123,6 @@ def classification_worker_impl(sequence: List[int]) -> None:
 
     Args:
         sequence(List[int]): The sequence of syscalls to be classified.
-        pid(int): The PID of the process that authored the syscall sequence.
     """
     is_malicious = ModelSingleton.classify(sequence)
     if is_malicious:
