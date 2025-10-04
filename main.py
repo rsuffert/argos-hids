@@ -10,12 +10,12 @@ import logging
 import multiprocessing
 from argparse import ArgumentParser
 from collections import defaultdict
-from typing import Dict, List, cast
+from typing import Dict, List, Tuple, cast
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, Future
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -62,13 +62,12 @@ def main() -> None:
                 # so we wait until it's long enough
                 continue
 
-            # fire and forget an async task for classifying the sequence
-            # and reporting if it's malicious
-            logging.debug(f"Classifying sequence from PID {pid}")
-            executor.submit(
+            future = executor.submit(
                 classification_worker_impl,
-                syscalls_from_current_pid[:MAX_SEQ_LEN]
+                syscalls_from_current_pid[:MAX_SEQ_LEN],
+                pid
             )
+            future.add_done_callback(classification_done_callback)
             
             # remove analyzed syscalls from the list
             pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
@@ -115,13 +114,20 @@ def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
         raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
     return mapping
 
-def classification_worker_impl(sequence: List[int]) -> None:
+def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int]:
     """
     Wrapper for the classification logic that can be executed asynchronously
     by the main processing loop.
 
     Args:
         sequence(List[int]): The sequence of syscalls to be classified.
+        pid (int): The PID of the process that authored the given sequence.
+    
+    Returns:
+        Tuple[bool, int]: whether or not the sequence was classified as malicious
+                          and the PID of the process that authored the sequence
+                          (this returned data is meant to be used for logging
+                          purposes in the parent/main process).
     """
     # each worker process will need to have its own Singleton instance,
     # since the child process wouldn't inherit it from the parent as
@@ -137,6 +143,23 @@ def classification_worker_impl(sequence: List[int]) -> None:
             tags=["warning"],
             priority=Priority.MAX
         )
+    return is_malicious, pid
+
+def classification_done_callback(future: Future) -> None:
+    """
+    Handles logging the results of the asynchronous classification task.
+
+    Args:
+        future (Future): The future (promise) returned by the async classification task.
+    """
+    if future.exception():
+        logging.error("Failed to classify sequence", exc_info=future.exception())
+        return
+    is_malicious, pid = future.result()
+    if is_malicious:
+        logging.warning(f"Malicious sequence detected from PID {pid}")
+    else:
+        logging.debug(f"Classified sequence from PID {pid} as benign")
 
 
 if __name__ == "__main__":
