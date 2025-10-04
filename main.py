@@ -31,8 +31,8 @@ def main() -> None:
     """Main function to run the ARGOS HIDS."""
     ensure_env()
 
-    # 'spawn' start method for multiprocessing ensures no state is inherited by subprocesses,
-    # which is needed for compatibility with the gRPC libraries.
+    # 'spawn' start method for multiprocessing ensures no state is inherited by subprocesses.
+    # this is needed for compatibility with the gRPC libraries, which are not fork-safe.
     multiprocessing.set_start_method("spawn", force=True)
 
     # logic for graceful shutdown
@@ -44,7 +44,6 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_signal) # ctrl+c
     signal.signal(signal.SIGTERM, handle_signal) # kill
 
-    ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
     syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping(cast(str, SYSCALL_MAPPING_PATH))
     with TetragonMonitor() as monitor, ProcessPoolExecutor(max_workers=int(MAX_CLASSIFICATION_WORKERS)) as executor:
         pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
@@ -124,6 +123,11 @@ def classification_worker_impl(sequence: List[int]) -> None:
     Args:
         sequence(List[int]): The sequence of syscalls to be classified.
     """
+    # each worker process will need to have its own Singleton instance,
+    # since the child process wouldn't inherit it from the parent as
+    # we're using "spawn" instead of "fork". the Singleton pattern
+    # ensures that each worker process only loads the model once.
+    ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
     is_malicious = ModelSingleton.classify(sequence)
     if is_malicious:
         notify_push(
