@@ -92,7 +92,7 @@ def ensure_env() -> None:
 
 def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
     """
-    Load the mapping of syscall names to their IDs. The mapping should be te same used
+    Load the mapping of syscall names to their IDs. The mapping should be the same used
     for training, as this is the mapping that will be applied to the collected syscall
     sequences before being passed on to the model for classification. The mapping is
     expected to be in CSV format with no header, where each line is a mapping and, within
