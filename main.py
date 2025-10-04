@@ -14,6 +14,9 @@ from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())

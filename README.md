@@ -44,3 +44,7 @@ Or, to see what command-line flags can be supplied:
 ```bash
 poetry run python3 main.py --help
 ```
+
+## Using a `.env` file for environment variables
+
+For convenience, you can add all the environment variables previously mentioned to a `.env` file at the root of the repository and they will be automatically loaded. An example of such file is the provided [`.env.sample`](./.env.sample) file at the root of the repository.
