@@ -7,6 +7,7 @@ import time
 import socket
 import signal
 import logging
+import multiprocessing
 from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Dict, List, cast
@@ -14,12 +15,14 @@ from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
+from concurrent.futures import ProcessPoolExecutor
 from dotenv import load_dotenv
 
 load_dotenv()
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
+MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", 4)
 
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
@@ -27,6 +30,11 @@ SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
     ensure_env()
+
+    # 'spawn' start method for multiprocessing ensures no state is inherited by subprocesses,
+    # which is needed for compatibility with the gRPC libraries.
+    multiprocessing.set_start_method("spawn", force=True)
+
     # logic for graceful shutdown
     running = True
     def handle_signal(signum: int, frame: object) -> None:
@@ -38,7 +46,7 @@ def main() -> None:
 
     ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
     syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping(cast(str, SYSCALL_MAPPING_PATH))
-    with TetragonMonitor() as monitor:
+    with TetragonMonitor() as monitor, ProcessPoolExecutor(max_workers=int(MAX_CLASSIFICATION_WORKERS)) as executor:
         pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
         while running:
             pid, syscall = monitor.get_next_syscall_name()
@@ -54,19 +62,14 @@ def main() -> None:
                 # this sequence has not reached the classification threshold yet,
                 # so we wait until it's long enough
                 continue
-            
+
+            # fire and forget an async task for classifying the sequence
+            # and reporting if it's malicious
             logging.debug(f"Classifying sequence from PID {pid}")
-            malicious = ModelSingleton.classify(syscalls_from_current_pid)
-            if malicious:
-                logging.warning(f"Malicious syscall sequence detected from PID {pid}.")
-                logging.info("Sending intrusion detection notification.")
-                notify_push(
-                    topic=cast(str, ARGOS_NTFY_TOPIC),
-                    message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
-                    title=f"Intrusion Alert for {MACHINE_NAME}",
-                    tags=["warning"],
-                    priority=Priority.MAX
-                )
+            executor.submit(
+                classification_worker_impl,
+                syscalls_from_current_pid[:MAX_SEQ_LEN]
+            )
             
             # remove analyzed syscalls from the list
             pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
@@ -112,6 +115,26 @@ def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
     except Exception as e:
         raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
     return mapping
+
+def classification_worker_impl(sequence: List[int]) -> None:
+    """
+    Wrapper for the classification logic that can be executed asynchronously
+    by the main processing loop.
+
+    Args:
+        sequence(List[int]): The sequence of syscalls to be classified.
+        pid(int): The PID of the process that authored the syscall sequence.
+    """
+    is_malicious = ModelSingleton.classify(sequence)
+    if is_malicious:
+        notify_push(
+            topic=cast(str, ARGOS_NTFY_TOPIC),
+            message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
+            title=f"Intrusion Alert for {MACHINE_NAME}",
+            tags=["warning"],
+            priority=Priority.MAX
+        )
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="ARGOS HIDS")
