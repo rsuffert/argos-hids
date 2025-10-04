@@ -61,13 +61,13 @@ def main() -> None:
                 # this sequence has not reached the classification threshold yet,
                 # so we wait until it's long enough
                 continue
-
-            future = executor.submit(
+            
+            # asynchronously submit sequence for classification
+            executor.submit(
                 classification_worker_impl,
                 syscalls_from_current_pid[:MAX_SEQ_LEN],
                 pid
-            )
-            future.add_done_callback(classification_done_callback)
+            ).add_done_callback(classification_done_callback)
             
             # remove analyzed syscalls from the list
             pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
