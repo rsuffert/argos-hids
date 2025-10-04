@@ -6,3 +6,6 @@ lightning_logs/
 
 # Trained models
 *.pt
+
+# Syscall-to-IDs mapping for the trained model
+*.csv
