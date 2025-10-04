@@ -26,10 +26,11 @@ First of all, install the dependencies with `poetry`:
 poetry install
 ```
 
-Then, set the environment variable `TRAINED_MODEL_PATH` to the PyTorch-saved `.pt` model file to be used to classify the syscall sequences happening on the host system.
+Then, set the environment variable `TRAINED_MODEL_PATH` to the PyTorch-saved `.pt` model file to be used to classify the syscall sequences happening on the host system and the `SYSCALL_MAPPING_PATH` environment variable to point to the CSV file containing the mapping of syscall names to the internal IDs expected by the trained model when passing production syscalls to it for inference. These IDs should match the ones used when training the model.
 
 ```bash
 export TRAINED_MODEL_PATH="<path>.pt"
+export SYSCALL_MAPPING_PATH="<path>.csv"
 ```
 
 Finally, run the system with:
@@ -43,3 +44,7 @@ Or, to see what command-line flags can be supplied:
 ```bash
 poetry run python3 main.py --help
 ```
+
+## Using a `.env` file for environment variables
+
+For convenience, you can add all the environment variables previously mentioned to a `.env` file at the root of the repository and they will be automatically loaded. An example of such file is the provided [`.env.sample`](./.env.sample) file at the root of the repository.

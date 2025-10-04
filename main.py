@@ -2,35 +2,31 @@
 
 import os
 import sys
+import csv
 import time
 import socket
 import signal
 import logging
 from argparse import ArgumentParser
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, cast
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
+
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
+SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
 
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
-    if not ARGOS_NTFY_TOPIC:
-        logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
-        sys.exit(1)
-    if not TRAINED_MODEL_PATH:
-        logging.error("TRAINED_MODEL_PATH environment variable is not set.")
-        sys.exit(1)
-    if not os.path.exists(TRAINED_MODEL_PATH):
-        logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")
-        sys.exit(1)
-    logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
-
+    ensure_env()
     # logic for graceful shutdown
     running = True
     def handle_signal(signum: int, frame: object) -> None:
@@ -40,10 +36,10 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_signal) # ctrl+c
     signal.signal(signal.SIGTERM, handle_signal) # kill
 
-    ModelSingleton.instantiate(TRAINED_MODEL_PATH)
+    ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
+    syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping(cast(str, SYSCALL_MAPPING_PATH))
     with TetragonMonitor() as monitor:
         pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
-        syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping()
         while running:
             pid, syscall = monitor.get_next_syscall_name()
             if pid is None or syscall is None:
@@ -65,7 +61,7 @@ def main() -> None:
                 logging.warning(f"Malicious syscall sequence detected from PID {pid}.")
                 logging.info("Sending intrusion detection notification.")
                 notify_push(
-                    topic=ARGOS_NTFY_TOPIC,
+                    topic=cast(str, ARGOS_NTFY_TOPIC),
                     message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
                     title=f"Intrusion Alert for {MACHINE_NAME}",
                     tags=["warning"],
@@ -75,17 +71,47 @@ def main() -> None:
             # remove analyzed syscalls from the list
             pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
 
-def load_syscalls_names_to_ids_mapping() -> Dict[str, int]:
+def ensure_env() -> None:
+    """Ensures the required environment variables are set."""
+    if not ARGOS_NTFY_TOPIC:
+        logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
+        sys.exit(1)
+    if not TRAINED_MODEL_PATH:
+        logging.error("TRAINED_MODEL_PATH environment variable is not set.")
+        sys.exit(1)
+    if not SYSCALL_MAPPING_PATH:
+        logging.error("SYSCALL_MAPPING_PATH environment variable is not set.")
+        sys.exit(1)
+    if not os.path.exists(TRAINED_MODEL_PATH):
+        logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")
+        sys.exit(1)
+    if not os.path.exists(SYSCALL_MAPPING_PATH):
+        logging.error(f"Syscall-to-IDs mapping not found: {SYSCALL_MAPPING_PATH}")
+        sys.exit(1)
+    logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
+
+def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
     """
-    Load the mapping of syscall names to their IDs. The mapping should be te same used
+    Load the mapping of syscall names to their IDs. The mapping should be the same used
     for training, as this is the mapping that will be applied to the collected syscall
-    sequences before being passed on to the model for classification.
+    sequences before being passed on to the model for classification. The mapping is
+    expected to be in CSV format with no header, where each line is a mapping and, within
+    the line, the first column is the syscall string name and the second is its internal
+    numeric ID expected by the model for inference.
+
+    Args:
+        mapping_path (str): The path to the CSV file with the syscall-to-ID mappings.
 
     Returns:
         Dict[str, int]: A dictionary mapping syscall names to their IDs.
     """
-    # TODO: implement this function
-    return {}
+    try:
+        with open(mapping_path, "r") as f:
+            reader = csv.reader(f)
+            mapping = {row[0]: int(row[1]) for row in reader}
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
+    return mapping
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="ARGOS HIDS")
