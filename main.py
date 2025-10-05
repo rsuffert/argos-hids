@@ -13,7 +13,6 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, cast
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
-from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
 from concurrent.futures import ProcessPoolExecutor, Future
 from dotenv import load_dotenv
@@ -32,7 +31,7 @@ MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
 # much overlap classified sequences will have. For instance, a delta equal to 1/4
 # of the sliding window size indicates an overlap of 75% in two consecutive
 # sequences sent for classification.
-SLIDING_WINDOW_SIZE = MAX_SEQ_LEN
+SLIDING_WINDOW_SIZE = os.getenv("SLIDING_WINDOW_SIZE")
 SLIDING_WINDOW_DELTA = SLIDING_WINDOW_SIZE // 4
 
 _running: bool = True
@@ -93,6 +92,9 @@ def ensure_env() -> None:
         sys.exit(1)
     if not SYSCALL_MAPPING_PATH:
         logging.error("SYSCALL_MAPPING_PATH environment variable is not set.")
+        sys.exit(1)
+    if not SLIDING_WINDOW_SIZE:
+        logging.error("SLIDING_WINDOW_SIZE environment variable is not set.")
         sys.exit(1)
     if not os.path.exists(TRAINED_MODEL_PATH):
         logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")

@@ -28,6 +28,7 @@ Apart from that setup, you also need to ensure the required environment variable
 | Environment variable | Default value | Description | 
 |----------------------|---------------|-------------|
 | `TRAINED_MODEL_PATH` | MANDATORY     | The path to the self-contained `.pt` PyTorch file containing the dump of the trained model to be used for intrusion detection. |
+| `SLIDING_WINDOW_SIZE` | MANDATORY | The size of the window os syscalls submitted to the model by ARGOS for classification. It is recommended that this matches the length of the syscall sequences used to train the model. |
 | `SYSCALL_MAPPING_PATH` | MANDATORY | The path to the CSV file containing the mapping of syscall names to the internal IDs expected by the trained model when passing production syscalls to it for inference. These IDs should match the ones used when training the model. The CSV should have no header and each line represents a mapping, where the first column is the syscall name and the second its numeric ID. |
 | `ARGOS_NTFY_TOPIC` | MANDATORY | The Ntfy topic to which ARGOS should publish its intrusion detection notifications. |
 | `MACHINE_NAME` | Return value of `socket.gethostname()` | The name by which the monitored machine will be called in the intrusion detection notifications. |
