@@ -39,35 +39,18 @@ def create_syscall_windows(syscalls: List[str], is_attack: bool = False) -> List
     if len(syscalls) < 20:
         return []
     
-    length = len(syscalls)
-    
+    # Simple window logic
     if is_attack:
-        # Attack window logic
-        if length >= 1024:
-            window_size, stride = 1024, 512
-        elif length >= 512:
-            window_size, stride = 512, 256
-        elif length >= 256:
-            return [syscalls[:256]]
-        else:
-            return [syscalls]
-        
-        windows = [syscalls[i:i+window_size] for i in range(0, length-window_size+1, stride)]
-        return windows[:10]  # Max 10 windows per attack
+        max_windows = 10
+        window_size = min(1024, len(syscalls))
+    else:
+        max_windows = 50
+        window_size = min(1024, len(syscalls))
     
-    # Normal window logic
-    window_size, stride = 1024, 512
-    windows = [syscalls[i:i+window_size] for i in range(0, length-window_size+1, stride)]
+    stride = max(1, window_size // 2)
+    windows = [syscalls[i:i+window_size] for i in range(0, len(syscalls)-window_size+1, stride)]
     
-    if not windows:
-        if length >= 512:
-            windows = [syscalls[:512]]
-        elif length >= 256:
-            windows = [syscalls[:256]]
-        elif length >= 100:
-            windows = [syscalls]
-    
-    return windows[:50]  # Max 50 windows per normal trace
+    return windows[:max_windows] if windows else [syscalls]
 
 
 def save_traces_to_files(traces: List[List[str]], output_directory: str, is_attack: bool = False) -> None:
@@ -127,34 +110,38 @@ def process_h5_dataset(normal_h5_path: str, attack_h5_path: str) -> None:
         save_traces_to_files(traces, path, is_attack)
 
 
+def should_skip_file(path_str: str) -> bool:
+    """Check if file should be skipped."""
+    return "__MACOSX" in path_str or ".DS_Store" in path_str
+
+
 def extract_zip_files(dataset_path: str, temp_dir: str) -> Tuple[List[Path], dict]:
     """Extract ZIP files and return syscall files and metadata."""
     syscall_files, json_metadata = [], {}
     
     for zip_path in Path(dataset_path).rglob("*.zip"):
-        if "__MACOSX" in str(zip_path) or ".DS_Store" in str(zip_path):
+        if should_skip_file(str(zip_path)):
             continue
             
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_file:
                 for file_info in zip_file.filelist:
-                    if ".DS_Store" in file_info.filename:
+                    if should_skip_file(file_info.filename) or not file_info.filename.endswith((".sc", ".json")):
                         continue
                         
-                    if file_info.filename.endswith((".sc", ".json")):
-                        stem = Path(file_info.filename).stem
-                        ext = Path(file_info.filename).suffix
-                        extracted_path = Path(temp_dir) / f"{stem}{ext}"
-                        extracted_path.write_bytes(zip_file.read(file_info))
-                        
-                        if ext == ".sc":
-                            syscall_files.append(extracted_path)
-                        elif ext == ".json":
-                            try:
-                                with open(extracted_path, "r") as f:
-                                    json_metadata[stem] = json.load(f)
-                            except Exception:
-                                pass
+                    stem = Path(file_info.filename).stem
+                    ext = Path(file_info.filename).suffix
+                    extracted_path = Path(temp_dir) / f"{stem}{ext}"
+                    extracted_path.write_bytes(zip_file.read(file_info))
+                    
+                    if ext == ".sc":
+                        syscall_files.append(extracted_path)
+                    else:  # .json
+                        try:
+                            with open(extracted_path, "r") as f:
+                                json_metadata[stem] = json.load(f)
+                        except Exception:
+                            pass
         except Exception as e:
             logging.warning(f"Error processing {zip_path}: {e}")
     
@@ -167,20 +154,16 @@ def parse_syscall_file(syscall_file: Path) -> List[Tuple[int, str]]:
         with open(syscall_file, "r") as f:
             syscalls = []
             for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
+                parts = line.strip().split()
+                if not parts:
                     continue
                 
-                parts = line.split()
-                if len(parts) >= 2:
-                    try:
-                        timestamp, syscall = int(parts[0]), parts[1]
-                    except ValueError:
-                        timestamp, syscall = line_num, parts[0]
-                elif len(parts) == 1:
+                # Try timestamp parsing, fallback to line number
+                try:
+                    timestamp = int(parts[0]) if len(parts) >= 2 else line_num
+                    syscall = parts[1] if len(parts) >= 2 else parts[0]
+                except ValueError:
                     timestamp, syscall = line_num, parts[0]
-                else:
-                    continue
                 
                 syscalls.append((timestamp, syscall))
             return syscalls
@@ -197,17 +180,30 @@ def extract_traces_from_syscalls(
     """Extract normal and attack traces from syscall data."""
     syscalls = [sc for _, sc in all_syscalls]
     
-    if not is_exploit:
-        return (syscalls, []) if len(syscalls) >= 20 else ([], [])
-    
-    if not attack_timestamp:
-        return ([], syscalls) if len(syscalls) >= 20 else ([], [])
-    
-    # Find attack start
-    attack_start = next((i for i, (ts, _) in enumerate(all_syscalls) if ts >= attack_timestamp), None)
-    if attack_start is None:
+    if len(syscalls) < 20:
         return [], []
     
+    if not is_exploit:
+        return syscalls, []
+    
+    if not attack_timestamp:
+        return [], syscalls
+    
+    # Find attack start
+    attack_start = _find_attack_start(all_syscalls, attack_timestamp)
+    return _split_traces_at_attack(all_syscalls, attack_start)
+
+
+def _find_attack_start(all_syscalls: List[Tuple[int, str]], attack_timestamp: int) -> int:
+    """Find index where attack starts."""
+    for i, (ts, _) in enumerate(all_syscalls):
+        if ts >= attack_timestamp:
+            return i
+    return len(all_syscalls)
+
+
+def _split_traces_at_attack(all_syscalls: List[Tuple[int, str]], attack_start: int) -> Tuple[List[str], List[str]]:
+    """Split syscalls into normal and attack traces."""
     normal_trace = [sc for _, sc in all_syscalls[:attack_start]] if attack_start > 20 else []
     attack_trace = [sc for _, sc in all_syscalls[attack_start:]]
     
@@ -215,6 +211,22 @@ def extract_traces_from_syscalls(
         normal_trace if len(normal_trace) >= 20 else [],
         attack_trace if len(attack_trace) >= 20 else []
     )
+
+
+def process_single_syscall_file(
+    syscall_file: Path, json_metadata: dict
+) -> Tuple[Optional[List[str]], Optional[List[str]]]:
+    """Process a single syscall file and return traces."""
+    stem = syscall_file.stem
+    metadata = json_metadata.get(stem, {})
+    is_exploit = metadata.get("exploit", False)
+    attack_timestamp = metadata.get("attack_timestamp") if is_exploit else None
+    
+    all_syscalls = parse_syscall_file(syscall_file)
+    if not all_syscalls:
+        return None, None
+    
+    return extract_traces_from_syscalls(all_syscalls, is_exploit, attack_timestamp)
 
 
 def process_lidds_dataset(dataset_path: str) -> None:
@@ -230,16 +242,7 @@ def process_lidds_dataset(dataset_path: str) -> None:
         normal_traces, attack_traces = [], []
         
         for syscall_file in syscall_files:
-            stem = syscall_file.stem
-            metadata = json_metadata.get(stem, {})
-            is_exploit = metadata.get("exploit", False)
-            attack_timestamp = metadata.get("attack_timestamp") if is_exploit else None
-            
-            all_syscalls = parse_syscall_file(syscall_file)
-            if not all_syscalls:
-                continue
-            
-            normal_trace, attack_trace = extract_traces_from_syscalls(all_syscalls, is_exploit, attack_timestamp)
+            normal_trace, attack_trace = process_single_syscall_file(syscall_file, json_metadata)
             
             if normal_trace:
                 normal_traces.append(normal_trace)
