@@ -93,9 +93,6 @@ def ensure_env() -> None:
     if not SYSCALL_MAPPING_PATH:
         logging.error("SYSCALL_MAPPING_PATH environment variable is not set.")
         sys.exit(1)
-    if not SLIDING_WINDOW_SIZE:
-        logging.error("SLIDING_WINDOW_SIZE environment variable is not set.")
-        sys.exit(1)
     if not os.path.exists(TRAINED_MODEL_PATH):
         logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")
         sys.exit(1)
