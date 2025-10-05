@@ -25,8 +25,15 @@ TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
 MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
 
-SLIDING_WINDOW_SIZE = MAX_SEQ_LEN # NOTE: Must match the sequences size expected by the model
-SLIDING_WINDOW_DELTA = 10         # Removed from the beginning of the sequence after classification
+# NOTE: SLIDING_WINDOW_SIZE is recommended to match the sequences size expected
+# by the model being used!
+# NOTE: SLIDING_WINDOW_DELTA indicates the size of the prefix to be removed from
+# the beginning of the stored after it's sent for classification. It dictates how
+# much overlap classified sequences will have. For instance, a delta equal to 1/4
+# of the sliding window size indicates an overlap of 75% in two consecutive
+# sequences sent for classification.
+SLIDING_WINDOW_SIZE = MAX_SEQ_LEN
+SLIDING_WINDOW_DELTA = SLIDING_WINDOW_SIZE // 4
 
 _running: bool = True
 
