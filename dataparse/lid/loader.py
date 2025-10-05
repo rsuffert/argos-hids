@@ -39,7 +39,7 @@ def _get_attack_window_config(syscall_length: int) -> tuple[int, int] | None:
     """Get window size and stride for attack traces based on length."""
     if syscall_length >= 1024:
         return 1024, 512
-    elif syscall_length >= 512:
+    if syscall_length >= 512:
         return 512, 256
     return None
 
