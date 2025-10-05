@@ -280,5 +280,7 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
+    torch.jit.script(model).save("lstm-autoencoder.pt")
+
 if __name__ == "__main__":
     main()
