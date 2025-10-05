@@ -29,11 +29,18 @@ class TetragonMonitor:
         self._tetragon_socket = TETRAGON_SOCKET
 
         self._ensure_config()
-        self._ensure_tetragon_running()
 
-        self._tetragon_grpc_chan = grpc.insecure_channel(self._tetragon_socket)
-        self._tetragon_grpc_stub = FineGuidanceSensorsStub(self._tetragon_grpc_chan)
-        self._event_iterator = iter(self._tetragon_grpc_stub.GetEvents(GetEventsRequest()))
+        try:
+            self._ensure_tetragon_running()
+        except Exception as e:
+            raise EnvironmentError(f"Failed to start Tetragon (is it properly installed?): {e}") from e
+
+        try:
+            self._tetragon_grpc_chan = grpc.insecure_channel(self._tetragon_socket)
+            self._tetragon_grpc_stub = FineGuidanceSensorsStub(self._tetragon_grpc_chan)
+            self._event_iterator = iter(self._tetragon_grpc_stub.GetEvents(GetEventsRequest()))
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to Tetragon via gRPC: {e}") from e
     
     def _ensure_config(self) -> None:
         """Copy the Tetragon config file to the appropriate directory if not already present."""
@@ -96,8 +103,11 @@ class TetragonMonitor:
     def __exit__(self, exc_type: type, exc_value: Exception, traceback: object) -> None:
         """Context manager exit method."""
         # Stop the Tetragon service and close the gRPC channel
-        subprocess.run(["sudo", "systemctl", "stop", "tetragon"], check=True)
-        self._tetragon_grpc_chan.close()
+        try:
+            subprocess.run(["sudo", "systemctl", "stop", "tetragon"], check=True)
+            self._tetragon_grpc_chan.close()
+        except Exception as e:
+            raise ResourceWarning(f"Failed to release Tetragon monitor resources: {e}") from e
 
 if __name__ == "__main__":
     with TetragonMonitor() as monitor:
