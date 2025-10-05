@@ -19,35 +19,26 @@ from concurrent.futures import ProcessPoolExecutor, Future
 from dotenv import load_dotenv
 
 load_dotenv()
-
-ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
-MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
-
+ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
+MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
+
+_running: bool = True
 
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
-    ensure_env()
+    global _running
 
     # 'spawn' start method for multiprocessing ensures no state is inherited by subprocesses.
     # this is needed for compatibility with the gRPC libraries, which are not fork-safe.
     multiprocessing.set_start_method("spawn", force=True)
 
-    # logic for graceful shutdown
-    running = True
-    def handle_signal(signum: int, frame: object) -> None:
-        nonlocal running
-        logging.info("Received termination signal. Exiting gracefully...")
-        running = False
-    signal.signal(signal.SIGINT, handle_signal) # ctrl+c
-    signal.signal(signal.SIGTERM, handle_signal) # kill
-
-    syscall_names_to_ids: Dict[str, int] = load_syscalls_names_to_ids_mapping(cast(str, SYSCALL_MAPPING_PATH))
+    syscall_names_to_ids: Dict[str, int] = load_syscalls_mapping(cast(str, SYSCALL_MAPPING_PATH))
+    pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
     with TetragonMonitor() as monitor, ProcessPoolExecutor(max_workers=int(MAX_CLASSIFICATION_WORKERS)) as executor:
-        pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
-        while running:
+        while _running:
             pid, syscall = monitor.get_next_syscall_name()
             if pid is None or syscall is None:
                 logging.info("No new syscalls to analyze. Sleeping for a few moments...")
@@ -56,11 +47,10 @@ def main() -> None:
             logging.debug(f"Received - PID: {pid}, syscall: {syscall}")
 
             pids_to_syscalls[pid].append(syscall_names_to_ids.get(syscall, -1))
+            
             syscalls_from_current_pid = pids_to_syscalls[pid]
             if len(syscalls_from_current_pid) < MAX_SEQ_LEN:
-                # this sequence has not reached the classification threshold yet,
-                # so we wait until it's long enough
-                continue
+                continue # sequence not long enough yet
             
             # asynchronously submit sequence for classification
             executor.submit(
@@ -71,6 +61,18 @@ def main() -> None:
             
             # remove analyzed syscalls from the list
             pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
+
+def setup_signals() -> None:
+    """
+    Sets up handlers for the signals that can be received by the
+    application, such as for graceful shutdown.
+    """
+    def handle_signal(signum: int, frame: object) -> None:
+        global _running
+        logging.info("Received termination signal. Exiting gracefully...")
+        _running = False
+    signal.signal(signal.SIGINT, handle_signal) # ctrl+c
+    signal.signal(signal.SIGTERM, handle_signal) # kill
 
 def ensure_env() -> None:
     """Ensures the required environment variables are set."""
@@ -91,7 +93,7 @@ def ensure_env() -> None:
         sys.exit(1)
     logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
 
-def load_syscalls_names_to_ids_mapping(mapping_path: str) -> Dict[str, int]:
+def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
     """
     Load the mapping of syscall names to their IDs. The mapping should be the same used
     for training, as this is the mapping that will be applied to the collected syscall
@@ -161,7 +163,6 @@ def classification_done_callback(future: Future) -> None:
     else:
         logging.debug(f"Classified sequence from PID {pid} as benign")
 
-
 if __name__ == "__main__":
     parser = ArgumentParser(description="ARGOS HIDS")
     parser.add_argument(
@@ -175,4 +176,6 @@ if __name__ == "__main__":
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s"
     )
+    setup_signals()
+    ensure_env()
     main()
