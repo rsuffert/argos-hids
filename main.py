@@ -31,7 +31,7 @@ MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
 # much overlap classified sequences will have. For instance, a delta equal to 1/4
 # of the sliding window size indicates an overlap of 75% in two consecutive
 # sequences sent for classification.
-SLIDING_WINDOW_SIZE = os.getenv("SLIDING_WINDOW_SIZE")
+SLIDING_WINDOW_SIZE = int(os.getenv("SLIDING_WINDOW_SIZE", "1024"))
 SLIDING_WINDOW_DELTA = SLIDING_WINDOW_SIZE // 4
 
 _running: bool = True
@@ -63,7 +63,7 @@ def main() -> None:
             # asynchronously submit sequence for classification
             executor.submit(
                 classification_worker_impl,
-                syscalls_from_current_pid[:MAX_SEQ_LEN],
+                syscalls_from_current_pid[:SLIDING_WINDOW_SIZE],
                 pid
             ).add_done_callback(classification_done_callback)
             
