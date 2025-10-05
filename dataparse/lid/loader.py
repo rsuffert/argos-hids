@@ -11,7 +11,7 @@ import zipfile
 import tempfile
 import h5py
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 # GNN module import from preprocessing
 try:
@@ -20,7 +20,6 @@ try:
 except ImportError:
     HAS_PREPROCESSING = False
     logging.warning("preprocessing.graph_preprocess_dataset not available, preprocessing disabled")
-
 
 PKL_TRACES_FILENAME = "processed_graphs.pkl"
 
@@ -35,96 +34,75 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _get_attack_window_config(syscall_length: int) -> tuple[int, int] | None:
-    """Get window size and stride for attack traces based on length."""
-    if syscall_length >= 1024:
-        return 1024, 512
-    if syscall_length >= 512:
-        return 512, 256
-    return None
-
-
-def _create_attack_windows(syscalls: List[str]) -> List[List[str]]:
-    """Create windows for attack traces with adaptive sizing."""
-    length = len(syscalls)
-    config = _get_attack_window_config(length)
-    
-    if config is None:
-        if length >= 256:
-            return [syscalls[:256]]
-        return [syscalls]
-    
-    window_size, stride = config
-    windows = []
-    for start in range(0, length - window_size + 1, stride):
-        windows.append(syscalls[start:start + window_size])
-    return windows[:10]  # Max 10 windows per attack
-
-
-def _create_normal_windows(syscalls: List[str]) -> List[List[str]]:
-    """Create windows for normal traces with fallback for shorter traces."""
-    window_size, stride = 1024, 512
-    windows = []
-    
-    for start in range(0, len(syscalls) - window_size + 1, stride):
-        windows.append(syscalls[start:start + window_size])
-    
-    if not windows:
-        length = len(syscalls)
-        if length >= 512:
-            windows.append(syscalls[:512])
-        elif length >= 256:
-            windows.append(syscalls[:256])
-        elif length >= 100:
-            windows.append(syscalls)
-    
-    return windows[:50]  # Max 50 windows per normal trace
-
-
 def create_syscall_windows(syscalls: List[str], is_attack: bool = False) -> List[List[str]]:
     """Create windowed sequences with adaptive sizing."""
     if len(syscalls) < 20:
         return []
     
+    length = len(syscalls)
+    
     if is_attack:
-        return _create_attack_windows(syscalls)
-    return _create_normal_windows(syscalls)
+        # Attack window logic
+        if length >= 1024:
+            window_size, stride = 1024, 512
+        elif length >= 512:
+            window_size, stride = 512, 256
+        elif length >= 256:
+            return [syscalls[:256]]
+        else:
+            return [syscalls]
+        
+        windows = [syscalls[i:i+window_size] for i in range(0, length-window_size+1, stride)]
+        return windows[:10]  # Max 10 windows per attack
+    
+    # Normal window logic
+    window_size, stride = 1024, 512
+    windows = [syscalls[i:i+window_size] for i in range(0, length-window_size+1, stride)]
+    
+    if not windows:
+        if length >= 512:
+            windows = [syscalls[:512]]
+        elif length >= 256:
+            windows = [syscalls[:256]]
+        elif length >= 100:
+            windows = [syscalls]
+    
+    return windows[:50]  # Max 50 windows per normal trace
 
 
 def save_traces_to_files(traces: List[List[str]], output_directory: str, is_attack: bool = False) -> None:
     """Save syscall traces to text files with windowing."""
     os.makedirs(output_directory, exist_ok=True)
     file_counter = 0
-    total_windows = 0
     
     for trace in traces:
-        windows = create_syscall_windows(trace, is_attack)
-        total_windows += len(windows)
-        
-        for window in windows:
+        for window in create_syscall_windows(trace, is_attack):
             with open(f"{output_directory}/trace_{file_counter}.txt", "w") as f:
-                for syscall in window:
-                    f.write(f"{syscall}(\n")
+                f.write("\n".join(f"{syscall}(" for syscall in window))
             file_counter += 1
     
     label = "Attack" if is_attack else "Normal"
-    logging.info(f"{label}: {len(traces)} traces → {total_windows} windows → {file_counter} files")
+    logging.info(f"{label}: {len(traces)} traces → {file_counter} files")
 
 
 def extract_h5_traces(h5_path: str) -> List[List[str]]:
     """Extract syscall traces from H5 file."""
-    traces = []
     try:
         with h5py.File(h5_path, "r") as file:
             data = file["sequences"]
-            for i in range(data.shape[0]):
-                trace = [str(int(syscall)) for syscall in data[i] if syscall != 0]
-                if len(trace) >= 20:
-                    traces.append(trace)
-        logging.info(f"Extracted {len(traces)} traces from H5 file")
+            traces = [[str(int(s)) for s in data[i] if s != 0] for i in range(data.shape[0])]
+            return [t for t in traces if len(t) >= 20]
     except Exception as error:
         logging.error(f"Error processing H5 file {h5_path}: {error}")
-    return traces
+        return []
+
+
+def split_dataset(traces: List[List[str]]) -> Tuple[List[List[str]], List[List[str]]]:
+    """Split dataset into train and inference sets (70/30)."""
+    if not traces:
+        return [], []
+    split_idx = int(0.7 * len(traces))
+    return traces[:split_idx], traces[split_idx:]
 
 
 def process_h5_dataset(normal_h5_path: str, attack_h5_path: str) -> None:
@@ -134,38 +112,33 @@ def process_h5_dataset(normal_h5_path: str, attack_h5_path: str) -> None:
     normal_traces = extract_h5_traces(normal_h5_path) if normal_h5_path and os.path.exists(normal_h5_path) else []
     attack_traces = extract_h5_traces(attack_h5_path) if attack_h5_path and os.path.exists(attack_h5_path) else []
     
-    # 70/30 split
-    def split_dataset(traces: List[List[str]]) -> tuple[List[List[str]], List[List[str]]]:
-        split_idx = int(0.7 * len(traces))
-        return traces[:split_idx], traces[split_idx:]
-    
     train_normal, infer_normal = split_dataset(normal_traces)
     train_attack, infer_attack = split_dataset(attack_traces)
     
     logging.info(f"Split - Train: {len(train_normal)} normal / {len(train_attack)} attack")
     
     # Save traces
-    save_traces_to_files(train_normal, "traces_train/normal", is_attack=False)
-    save_traces_to_files(train_attack, "traces_train/attack", is_attack=True)
-    save_traces_to_files(infer_normal, "traces_infer/normal", is_attack=False)
-    save_traces_to_files(infer_attack, "traces_infer/attack", is_attack=True)
+    for traces, path, is_attack in [
+        (train_normal, "traces_train/normal", False),
+        (train_attack, "traces_train/attack", True),
+        (infer_normal, "traces_infer/normal", False),
+        (infer_attack, "traces_infer/attack", True)
+    ]:
+        save_traces_to_files(traces, path, is_attack)
 
 
-def extract_zip_files(dataset_path: str, temp_dir: str) -> tuple[List[Path], dict]:
+def extract_zip_files(dataset_path: str, temp_dir: str) -> Tuple[List[Path], dict]:
     """Extract ZIP files and return syscall files and metadata."""
-    syscall_files = []
-    json_metadata = {}
+    syscall_files, json_metadata = [], {}
     
     for zip_path in Path(dataset_path).rglob("*.zip"):
-        # Skip unnecessary folder
         if "__MACOSX" in str(zip_path) or ".DS_Store" in str(zip_path):
             continue
             
         try:
             with zipfile.ZipFile(zip_path, "r") as zip_file:
                 for file_info in zip_file.filelist:
-                    # Skip unnecessary file
-                    if (".DS_Store" in file_info.filename):
+                    if ".DS_Store" in file_info.filename:
                         continue
                         
                     if file_info.filename.endswith((".sc", ".json")):
@@ -188,80 +161,60 @@ def extract_zip_files(dataset_path: str, temp_dir: str) -> tuple[List[Path], dic
     return syscall_files, json_metadata
 
 
-def get_attack_timestamp(metadata: dict) -> int | None:
-    """Extract attack timestamp from metadata."""
-    if "time" not in metadata or "exploit" not in metadata["time"]:
-        return None
-    
-    exploit_events = metadata["time"]["exploit"]
-    if not exploit_events or not isinstance(exploit_events, list):
-        return None
-    
-    return int(exploit_events[0].get("absolute", 0))
-
-
-def parse_syscall_file(syscall_file: Path) -> List[tuple]:
+def parse_syscall_file(syscall_file: Path) -> List[Tuple[int, str]]:
     """Parse syscall file and return list of (timestamp, syscall) tuples."""
-    all_syscalls = []
     try:
         with open(syscall_file, "r") as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 6:
-                    timestamp = int(float(parts[0]))
-                    syscall = parts[5]
-                    all_syscalls.append((timestamp, syscall))
-    except Exception:
-        pass
-    
-    return all_syscalls
+            syscalls = []
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split()
+                if len(parts) >= 2:
+                    try:
+                        timestamp, syscall = int(parts[0]), parts[1]
+                    except ValueError:
+                        timestamp, syscall = line_num, parts[0]
+                elif len(parts) == 1:
+                    timestamp, syscall = line_num, parts[0]
+                else:
+                    continue
+                
+                syscalls.append((timestamp, syscall))
+            return syscalls
+    except Exception as e:
+        logging.warning(f"Error parsing syscall file {syscall_file}: {e}")
+        return []
 
 
 def extract_traces_from_syscalls(
-    all_syscalls: List[tuple], is_exploit: bool, attack_timestamp: int | None
-) -> tuple[List[str], List[str]]:
+    all_syscalls: List[Tuple[int, str]], 
+    is_exploit: bool, 
+    attack_timestamp: Optional[int]
+) -> Tuple[List[str], List[str]]:
     """Extract normal and attack traces from syscall data."""
-    normal_trace: List[str] = []
-    attack_trace: List[str] = []
+    syscalls = [sc for _, sc in all_syscalls]
     
     if not is_exploit:
-        syscalls = [sc for _, sc in all_syscalls]
-        if len(syscalls) >= 20:
-            normal_trace = syscalls
-        return normal_trace, attack_trace
+        return (syscalls, []) if len(syscalls) >= 20 else ([], [])
     
     if not attack_timestamp:
-        syscalls = [sc for _, sc in all_syscalls]
-        if len(syscalls) >= 20:
-            attack_trace = syscalls
-        return normal_trace, attack_trace
+        return ([], syscalls) if len(syscalls) >= 20 else ([], [])
     
     # Find attack start
     attack_start = next((i for i, (ts, _) in enumerate(all_syscalls) if ts >= attack_timestamp), None)
-    
     if attack_start is None:
-        return normal_trace, attack_trace
-    
-    # Attack sequence: from timestamp onwards
-    attack_syscalls = [sc for _, sc in all_syscalls[attack_start:]]
-    if len(attack_syscalls) >= 20:
-        attack_trace = attack_syscalls
-    
-    # Normal sequence: before attack
-    if attack_start > 20:
-        normal_syscalls = [sc for _, sc in all_syscalls[:attack_start]]
-        if len(normal_syscalls) >= 20:
-            normal_trace = normal_syscalls
-    
-    return normal_trace, attack_trace
-
-
-def split_dataset(traces: List[List[str]]) -> tuple[List[List[str]], List[List[str]]]:
-    """Split dataset into train and inference sets (70/30)."""
-    if not traces:
         return [], []
-    split_idx = int(0.7 * len(traces))
-    return traces[:split_idx], traces[split_idx:]
+    
+    normal_trace = [sc for _, sc in all_syscalls[:attack_start]] if attack_start > 20 else []
+    attack_trace = [sc for _, sc in all_syscalls[attack_start:]]
+    
+    return (
+        normal_trace if len(normal_trace) >= 20 else [],
+        attack_trace if len(attack_trace) >= 20 else []
+    )
 
 
 def process_lidds_dataset(dataset_path: str) -> None:
@@ -275,16 +228,14 @@ def process_lidds_dataset(dataset_path: str) -> None:
         logging.info(f"Extracted {len(syscall_files)} .sc files, {exploit_count} exploits")
         
         normal_traces, attack_traces = [], []
-        attack_traces_extracted = 0
         
         for syscall_file in syscall_files:
             stem = syscall_file.stem
             metadata = json_metadata.get(stem, {})
             is_exploit = metadata.get("exploit", False)
+            attack_timestamp = metadata.get("attack_timestamp") if is_exploit else None
             
-            attack_timestamp = get_attack_timestamp(metadata) if is_exploit else None
             all_syscalls = parse_syscall_file(syscall_file)
-            
             if not all_syscalls:
                 continue
             
@@ -294,9 +245,8 @@ def process_lidds_dataset(dataset_path: str) -> None:
                 normal_traces.append(normal_trace)
             if attack_trace:
                 attack_traces.append(attack_trace)
-                attack_traces_extracted += 1
         
-        logging.info(f"Extracted {attack_traces_extracted} attacks, {len(normal_traces)} normal traces")
+        logging.info(f"Extracted {len(attack_traces)} attacks, {len(normal_traces)} normal traces")
         
         if not normal_traces and not attack_traces:
             logging.error("No valid traces found!")
@@ -309,10 +259,13 @@ def process_lidds_dataset(dataset_path: str) -> None:
         logging.info(f"Infer: {len(infer_normal)} normal / {len(infer_attack)} attack")
         
         # Save traces
-        save_traces_to_files(train_normal, "traces_train/normal", is_attack=False)
-        save_traces_to_files(train_attack, "traces_train/attack", is_attack=True)
-        save_traces_to_files(infer_normal, "traces_infer/normal", is_attack=False)
-        save_traces_to_files(infer_attack, "traces_infer/attack", is_attack=True)
+        for traces, path, is_attack in [
+            (train_normal, "traces_train/normal", False),
+            (train_attack, "traces_train/attack", True),
+            (infer_normal, "traces_infer/normal", False),
+            (infer_attack, "traces_infer/attack", True)
+        ]:
+            save_traces_to_files(traces, path, is_attack)
 
 
 def main() -> None:
@@ -334,12 +287,12 @@ def main() -> None:
         
         if normal_h5 and attack_h5:
             process_h5_dataset(normal_h5, attack_h5)
+            
+            if args.preprocess:
+                output_path = preprocess_dataset("traces_train", False, False, PKL_TRACES_FILENAME)
+                logging.info(f"Graph preprocessing completed: {output_path}")
         else:
             logging.error("Both normal and attack H5 files must be specified")
-        
-        if args.preprocess:
-            output_path = preprocess_dataset("traces_train", False, False, PKL_TRACES_FILENAME)
-            logging.info(f"Graph preprocessing completed: {output_path}")
     else:
         logging.error("No dataset specified. Use -l for LID-DS or -n/-a for H5 files")
 
