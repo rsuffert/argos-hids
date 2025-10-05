@@ -13,7 +13,6 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, cast
 from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
-from models.lstm.trainer import MAX_SEQ_LEN
 from models.inference import ModelSingleton
 from concurrent.futures import ProcessPoolExecutor, Future
 from dotenv import load_dotenv
@@ -24,6 +23,8 @@ ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
 MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
+SLIDING_WINDOW_SIZE = int(os.getenv("SLIDING_WINDOW_SIZE", "1024"))
+SLIDING_WINDOW_DELTA = int(os.getenv("SLIDING_WINDOW_DELTA", str(SLIDING_WINDOW_SIZE // 4)))
 
 _running: bool = True
 
@@ -45,22 +46,21 @@ def main() -> None:
                 time.sleep(3)
                 continue
             logging.debug(f"Received - PID: {pid}, syscall: {syscall}")
-
-            pids_to_syscalls[pid].append(syscall_names_to_ids.get(syscall, -1))
             
             syscalls_from_current_pid = pids_to_syscalls[pid]
-            if len(syscalls_from_current_pid) < MAX_SEQ_LEN:
+            syscalls_from_current_pid.append(syscall_names_to_ids.get(syscall, -1))
+            if len(syscalls_from_current_pid) < SLIDING_WINDOW_SIZE:
                 continue # sequence not long enough yet
             
             # asynchronously submit sequence for classification
             executor.submit(
                 classification_worker_impl,
-                syscalls_from_current_pid[:MAX_SEQ_LEN],
+                syscalls_from_current_pid[:SLIDING_WINDOW_SIZE],
                 pid
             ).add_done_callback(classification_done_callback)
             
-            # remove analyzed syscalls from the list
-            pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
+            # remove the oldest syscalls from the list
+            pids_to_syscalls[pid] = syscalls_from_current_pid[SLIDING_WINDOW_DELTA:]
 
 def setup_signals() -> None:
     """

@@ -32,6 +32,8 @@ Apart from that setup, you also need to ensure the required environment variable
 | `ARGOS_NTFY_TOPIC` | MANDATORY | The Ntfy topic to which ARGOS should publish its intrusion detection notifications. |
 | `MACHINE_NAME` | Return value of `socket.gethostname()` | The name by which the monitored machine will be called in the intrusion detection notifications. |
 | `MAX_CLASSIFICATION_WORKERS` | 4 | Maximum number of processes to be spawned for asynchronous/parallel syscall sequences classification. |
+| `SLIDING_WINDOW_SIZE` | 1024 | The size of the window of syscalls submitted to the model by ARGOS for classification. **It is recommended that this matches the length of the syscall sequences used to train the model.** |
+| `SLIDING_WINDOW_DELTA` | `SLIDING_WINDOW_SIZE` / 4 | Indicates the size of the prefix of syscalls to be removed from the stored sequence for each PID after it's sent for classification. It dictates how much overlap classified sequences will have. |
 
 ### Execution Commands
 
