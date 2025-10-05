@@ -25,6 +25,9 @@ TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
 MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
 
+SLIDING_WINDOW_SIZE = MAX_SEQ_LEN # NOTE: Must match the sequences size expected by the model
+SLIDING_WINDOW_DELTA = 10         # Removed from the beginning of the sequence after classification
+
 _running: bool = True
 
 def main() -> None:
@@ -45,11 +48,10 @@ def main() -> None:
                 time.sleep(3)
                 continue
             logging.debug(f"Received - PID: {pid}, syscall: {syscall}")
-
-            pids_to_syscalls[pid].append(syscall_names_to_ids.get(syscall, -1))
             
             syscalls_from_current_pid = pids_to_syscalls[pid]
-            if len(syscalls_from_current_pid) < MAX_SEQ_LEN:
+            syscalls_from_current_pid.append(syscall_names_to_ids.get(syscall, -1))
+            if len(syscalls_from_current_pid) < SLIDING_WINDOW_SIZE:
                 continue # sequence not long enough yet
             
             # asynchronously submit sequence for classification
@@ -59,8 +61,8 @@ def main() -> None:
                 pid
             ).add_done_callback(classification_done_callback)
             
-            # remove analyzed syscalls from the list
-            pids_to_syscalls[pid] = pids_to_syscalls[pid][MAX_SEQ_LEN:]
+            # remove the oldest syscalls from the list
+            pids_to_syscalls[pid] = syscalls_from_current_pid[SLIDING_WINDOW_DELTA:]
 
 def setup_signals() -> None:
     """
