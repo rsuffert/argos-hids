@@ -24,6 +24,19 @@ class Predicter(Protocol):
         """
         ...
 
+def ensure_predicter(obj: object) -> None:
+    """
+    Ensures an object implements the Predicter protocol,
+    and raises an exception if it does not.
+
+    Args:
+        obj (object): The object to verify.
+    """
+    if not hasattr(obj, "predict") or not callable(obj.predict):
+        raise AttributeError(
+            "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
+        )
+
 class ModelSingleton:
     """Represents a generic PyTorch neural network Singleton model instance."""
     _instance: Optional[Predicter] = None
@@ -45,22 +58,9 @@ class ModelSingleton:
         model = torch.jit.load(path)
         model.eval()
         model.to(device.value)
-        cls._ensure_predicter(model)
+        ensure_predicter(model)
         cls._instance = cast(Predicter, model)
         cls._device = device
-    
-    @classmethod
-    def _ensure_predicter(cls, obj: object) -> None:
-        """
-        Ensures an object implements the Predicter protocol.
-
-        Args:
-            obj (object): The object to verify.
-        """
-        if not hasattr(obj, "predict") or not callable(obj.predict):
-            raise AttributeError(
-                "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
-            )
     
     @classmethod
     def get(cls) -> Tuple[Predicter, DeviceType]:
