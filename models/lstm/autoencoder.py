@@ -29,6 +29,7 @@ MAX_EPOCHS = 40             # Number of training epochs
 MAX_SEQ_LEN = 2048          # Maximum sequence length for padding/truncation
 EARLY_STOP_PATIENCE = 5     # Patience for early stopping training
 EARLY_STOP_MIN_DELTA = 50   # Minimum change to qualify as an improvement
+THRESHOLD_PERCENTILE = 95.0 # Percentile of reconstruction errors to use as anomaly detection threshold
 
 # ==========================
 # Dataset (H5 files) paths
@@ -75,6 +76,7 @@ class LSTMAutoencoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(config.__dict__)
         self.lr = config.lr
+        self.threshold = torch.jit.Attribute(0.0, float) # will be overwritten
 
         # Encoder: takes syscall IDs
         self.encoder = torch.nn.LSTM(
@@ -150,6 +152,52 @@ class LSTMAutoencoder(pl.LightningModule):
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
+    
+    @torch.jit.export
+    def reconstruction_error(self, sequence: torch.Tensor) -> float:
+        """
+        Computes the reconstruction MSE for a single sequence.
+        Make sure to set the model to eval mode before calling this.
+
+        Args:
+            sequence (torch.Tensor): The sequence to compute MSE for.
+
+        Returns:
+            float: The MSE for the given sequence.
+        """
+        if sequence.dim() != 1:
+            raise ValueError("Input sequence must be a 1D tensor of syscall IDs.")
+        seq_len = sequence.shape[0]
+        sequence = sequence.unsqueeze(0).unsqueeze(-1) # shape (1, seq_len, 1)
+        lengths = torch.tensor([seq_len], dtype=torch.long, device=sequence.device)
+        with torch.no_grad():
+            reconstructed = self.forward(sequence, lengths)
+        return torch.mean((sequence - reconstructed) ** 2).item()
+    
+    @torch.jit.export
+    def predict(self, sequence: torch.Tensor) -> bool:
+        """
+        Classifies the given syscall sequence, represented as a PyTorch tensor.
+        Make sure to set the model to eval mode before calling this.
+
+        Args:
+            sequence (torch.Tensor): The unidimensional sequence of syscall IDs for the model to classify.
+                                    The IDs are already mapped to the values expected by the model.
+        
+        Returns:
+            bool: True if the sequence is malicious; False otherwise.
+        """
+        return self.reconstruction_error(sequence) > self.threshold # type: ignore[operator]
+    
+    @torch.jit.export
+    def set_threshold(self, threshold: float) -> None:
+        """
+        Set the reconstruction error threshold for anomaly detection.
+
+        Args:
+            threshold (float): The threshold value above which a sequence is considered anomalous.
+        """
+        self.threshold = threshold # type: ignore[assignment]
 
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
@@ -224,6 +272,33 @@ def sanity_check() -> None:
         
         print("========= All Sanity Checks Passed! =========\n")
 
+def compute_threshold(
+    model: LSTMAutoencoder,
+    dataloader: torch.utils.data.DataLoader,
+    percentile: float = 95.0
+) -> float:
+    """
+    Computes the reconstruction error threshold from a dataloader.
+
+    Args:
+        model (LSTMAutoencoder): The trained autoencoder model.
+        dataloader (torch.utils.data.DataLoader): DataLoader with normal validation sequences.
+        percentile (float): The percentile to use for threshold selection (default: 95.0).
+
+    Returns:
+        float: The computed threshold value.
+    """
+    model.eval()
+    errors: List[float] = []
+    with torch.no_grad():
+        for batch in dataloader:
+            sequences, lengths = batch
+            for i in range(sequences.size(0)):
+                seq_len = int(lengths[i].item())
+                seq = sequences[i, :seq_len].squeeze(-1)
+                errors.append(model.reconstruction_error(seq))
+    return float(np.percentile(errors, percentile))
+
 def main() -> None:
     """Main function to train the LSTM autoencoder."""
     sanity_check()
@@ -280,6 +355,9 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
+    model.set_threshold(compute_threshold(
+        model, valid_loader, THRESHOLD_PERCENTILE
+    ))
     torch.jit.script(model).save("lstm-autoencoder.pt")
 
 if __name__ == "__main__":
