@@ -146,6 +146,29 @@ class LSTMClassifier(pl.LightningModule):
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
+    @torch.jit.export
+    def predict(self, sequence: torch.Tensor) -> bool:
+        """
+        Classifies the given syscall sequence, represented as a PyTorch tensor.
+        Make sure to set the model to eval mode before calling this.
+
+        Args:
+            sequence (torch.Tensor): The unidimensional sequence of syscall IDs for the model to classify.
+                                     The IDs are already mapped to the values expected by the model.
+        
+        Returns:
+            bool: True if the sequence is malicious; False otherwise.
+        """
+        if sequence.dim() != 1:
+            raise ValueError("Input sequence must be a 1D tensor of syscall IDs.")
+        seq_len = sequence.shape[0]
+        sequence = sequence.unsqueeze(0).unsqueeze(-1) # add batch and feature dimensions: (1, seq_len, 1)
+        lengths = torch.tensor([seq_len], dtype=torch.long, device=sequence.device)
+        with torch.no_grad():
+            logits = self.forward(sequence, lengths)
+            pred = torch.argmax(logits, dim=1).item()
+        return bool(pred)
+
 class H5LazyDataset(torch.utils.data.Dataset):
     """Lazy dataset for reading sequences from an HDF5 file."""
 

@@ -1,17 +1,45 @@
-"""Factory for PyTorch neural network model objects to be used for inference."""
+"""Factory for PyTorch models to be used for syscall sequences inference."""
 
 import torch
 from enum import Enum
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Protocol, cast
 
 class DeviceType(Enum):
     """Represents a PyTorch device type."""
     CPU = "cpu"
     CUDA = "cuda"
 
+class Predicter(Protocol):
+    """A model that can predict whether or not a sequence of syscall IDs is malicious."""
+    def predict(self, sequence: torch.Tensor) -> bool:
+        """
+        Classifies the given syscall sequence, represented as a PyTorch tensor.
+
+        Args:
+            sequence (torch.Tensor): The unidimensional sequence of syscall IDs for the model to classify.
+                                     The IDs are already mapped to the values expected by the model.
+        
+        Returns:
+            bool: True if the sequence is malicious; False otherwise.
+        """
+        ...
+
+def ensure_predicter(obj: object) -> None:
+    """
+    Ensures an object implements the Predicter protocol,
+    and raises an exception if it does not.
+
+    Args:
+        obj (object): The object to verify.
+    """
+    if not hasattr(obj, "predict") or not callable(obj.predict):
+        raise AttributeError(
+            "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
+        )
+
 class ModelSingleton:
     """Represents a generic PyTorch neural network Singleton model instance."""
-    _instance: Optional[torch.nn.Module] = None
+    _instance: Optional[Predicter] = None
     _device: Optional[DeviceType] = None
 
     @classmethod
@@ -30,16 +58,17 @@ class ModelSingleton:
         model = torch.jit.load(path)
         model.eval()
         model.to(device.value)
-        cls._instance = model
+        ensure_predicter(model)
+        cls._instance = cast(Predicter, model)
         cls._device = device
     
     @classmethod
-    def get(cls) -> Tuple[torch.nn.Module, DeviceType]:
+    def get(cls) -> Tuple[Predicter, DeviceType]:
         """
         Getter for the Singleton instance.
 
         Returns:
-            Tuple[torch.nn.Module, DeviceType]: The model Singleton instance and its device type.
+            Tuple[Predicter, DeviceType]: The model Singleton instance and its device type.
         """
         if cls._instance is None or cls._device is None:
             raise RuntimeError("Model not instantiated. Call instantiate(path) first.")
@@ -61,13 +90,5 @@ class ModelSingleton:
             bool: True if the sequence is classified as malicious, False otherwise.
         """
         model, device = cls.get()
-        seq_tensor = (torch.tensor(sequence, dtype=torch.float32)
-                           .unsqueeze(0)
-                           .unsqueeze(-1)
-                           .to(device.value))
-        len_tensor = (torch.tensor([len(sequence)], dtype=torch.long)
-                           .to(device.value))
-        with torch.no_grad():
-            outputs = model(seq_tensor, len_tensor)
-        predicted_class = torch.argmax(outputs, dim=1).item()
-        return predicted_class == 1
+        seq_tensor = torch.tensor(sequence, dtype=torch.float32).to(device.value)
+        return model.predict(seq_tensor)
