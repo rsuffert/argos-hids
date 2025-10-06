@@ -146,6 +146,7 @@ class LSTMClassifier(pl.LightningModule):
         """Configure optimizer."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
+    @torch.jit.export
     def predict(self, sequence: torch.Tensor) -> bool:
         """
         Classifies the given syscall sequence, represented as a PyTorch tensor.
