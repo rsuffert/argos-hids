@@ -295,7 +295,7 @@ def compute_threshold(
             sequences, lengths = batch
             for i in range(sequences.size(0)):
                 seq_len = int(lengths[i].item())
-                seq = sequences[i, :seq_len].squeeze(-1)
+                seq = sequences[i, :seq_len]
                 errors.append(model.reconstruction_error(seq))
     return float(np.percentile(errors, percentile))
 
