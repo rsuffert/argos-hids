@@ -10,7 +10,7 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 import h5py
 import numpy as np
 
@@ -76,6 +76,7 @@ class LSTMAutoencoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(config.__dict__)
         self.lr = config.lr
+        self.hidden_size = config.hidden_size
         self.threshold = torch.jit.Attribute(0.0, float) # will be overwritten
 
         # Encoder: takes syscall IDs
@@ -99,8 +100,17 @@ class LSTMAutoencoder(pl.LightningModule):
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through encoder-decoder autoencoder."""
-        encoded, _ = self.encoder(x)
-        decoded, _ = self.decoder(encoded)
+        packed_input = pack_padded_sequence(
+            x, lengths.cpu(), batch_first=True, enforce_sorted=False
+        )
+        _, (h_n, c_n) = self.encoder(packed_input)
+
+        batch_size, seq_len = x.size(0), x.size(1)
+        decoder_input = torch.zeros(
+            batch_size, seq_len, self.hidden_size, device=x.device
+        )
+        decoded, _ = self.decoder(decoder_input, (h_n, c_n))
+
         return self.output_layer(decoded)
 
 
