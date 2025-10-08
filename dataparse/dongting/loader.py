@@ -10,6 +10,7 @@ import logging
 import numpy as np
 import h5py
 import pandas as pd
+import csv
 
 SYSCALL_TBL_PATH          = os.getenv("SYSCALL_TBL_PATH",
                                       os.path.join(os.path.dirname(__file__), "syscall_64.tbl"))
@@ -19,6 +20,7 @@ ABNORMAL_DATA_FOLDER_PATH = os.getenv("ABNORMAL_DATA_FOLDER_PATH",
                                       os.path.join(os.path.dirname(__file__), "Abnormal_data"))
 BASELINE_XLSX_PATH        = os.getenv("BASELINE_XLSX_PATH",
                                       os.path.join(os.path.dirname(__file__), "Baseline.xlsx"))
+SYSCALL_MAPPING_DUMP_PATH = "mapping.csv"
 
 def parse_syscall_tbl(path: str) -> Dict[str, int]:
     """
@@ -145,6 +147,12 @@ def main() -> None:
     syscall_map = parse_syscall_tbl(SYSCALL_TBL_PATH)
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
     logging.info("Loaded %d syscalls from the syscall table.", len(syscall_map))
+
+    with open(SYSCALL_MAPPING_DUMP_PATH, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        for k, v in syscall_map.items():
+            writer.writerow([k, v])
+    logging.info(f"Dumped loaded syscalls to {SYSCALL_MAPPING_DUMP_PATH}")
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
     baseline_df = pd.read_excel(BASELINE_XLSX_PATH)

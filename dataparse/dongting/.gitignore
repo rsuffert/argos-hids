@@ -11,3 +11,6 @@
 
 # Mapping from syscall names to syscall IDs
 *.tbl
+
+# Syscall names-to-IDs mapping
+*.csv
