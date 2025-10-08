@@ -150,7 +150,7 @@ def main() -> None:
     with open(SYSCALL_MAPPING_DUMP_PATH, "w") as f:
         for k, v in syscall_map.items():
             f.write(f"{k},{v}\n")
-    logging.info(f"Dumping loaded syscalls to {SYSCALL_MAPPING_DUMP_PATH}")
+    logging.info(f"Dumped loaded syscalls to {SYSCALL_MAPPING_DUMP_PATH}")
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
     baseline_df = pd.read_excel(BASELINE_XLSX_PATH)
