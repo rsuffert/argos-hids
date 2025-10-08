@@ -1,6 +1,7 @@
 [tool.ruff]
 exclude = [
-    "tetragon/proto/*" # proto-generated files
+    "tetragon/proto/*", # proto-generated files
+    "models/gnn/lib"    # git submodule
 ]
 lint.select = [
     "E",    # Enforce pycodestyle errors (style, whitespace)
