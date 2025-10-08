@@ -10,6 +10,7 @@ import logging
 import numpy as np
 import h5py
 import pandas as pd
+import csv
 
 SYSCALL_TBL_PATH          = os.getenv("SYSCALL_TBL_PATH",
                                       os.path.join(os.path.dirname(__file__), "syscall_64.tbl"))
@@ -147,9 +148,10 @@ def main() -> None:
     assert syscall_map, "Syscall map is empty. Check the syscall table file or path."
     logging.info("Loaded %d syscalls from the syscall table.", len(syscall_map))
 
-    with open(SYSCALL_MAPPING_DUMP_PATH, "w") as f:
+    with open(SYSCALL_MAPPING_DUMP_PATH, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
         for k, v in syscall_map.items():
-            f.write(f"{k},{v}\n")
+            writer.writerow([k, v])
     logging.info(f"Dumped loaded syscalls to {SYSCALL_MAPPING_DUMP_PATH}")
 
     assert os.path.exists(BASELINE_XLSX_PATH), f"Baseline file not found: {BASELINE_XLSX_PATH}"
