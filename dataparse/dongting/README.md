@@ -24,3 +24,4 @@ This folder contains scripts and resources for pre-processing the DongTing datas
     ```bash
     poetry run python3 loader.py
     ```
+    Additionally, pre-processing the dataset will also output a `mapping.csv` file, which contains the mapping of syscall name to numeric ID applied in the pre-processed `.h5` files. This mapping should also be applied when performing inference with the model trained on this dataset.
