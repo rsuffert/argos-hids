@@ -81,3 +81,5 @@ For further information on the script parameters, run:
 ```bash
 poetry run python3 supervised.py --help
 ```
+
+## Usage of [`autoencoder.py`](./autoencoder.py) (unsupervised)
