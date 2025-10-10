@@ -83,3 +83,22 @@ poetry run python3 supervised.py --help
 ```
 
 ## Usage of [`autoencoder.py`](./autoencoder.py) (unsupervised)
+
+1. **Set up the environment (if not done already):**
+    Follow steps 1-3 from the [`supervised.py` script usage](#usage-of-supervisedpy) section.
+2. **Extract and pre-process the datasets (if not done already):** Follow steps 4-6 from the [`supervised.py` script usage](#usage-of-supervisedpy) section.
+3. **Run the training script:**
+    ```bash
+    poetry run python3 autoencoder.py \
+        --train_dataset traces_train/processed_graphs.pkl \
+        --test_dataset traces_infer/processed_graphs.pkl \
+        --epochs 50 \
+        --batch_size 64 \
+        --learning_rate 0.001 \
+        --target_fpr 0.05 \
+        --num_layers 4
+    ```
+    Note that the parameters are a suggestion and can be customized. For information on what parameters can be supplied, run:
+    ```bash
+    poetry run python3 autoencoder.py --help
+    ```
