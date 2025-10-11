@@ -17,8 +17,6 @@ ATTACK_TRAIN_H5 = os.getenv("ATTACK_TRAIN_H5", "Attach_DTDS-train.h5")
 ATTACK_VALID_H5 = os.getenv("ATTACK_VALID_H5", "Attach_DTDS-validation.h5")
 ATTACK_TEST_H5  = os.getenv("ATTACK_TEST_H5",  "Attach_DTDS-test.h5")
 
-SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH", "mapping.csv")
-
 TRAIN_TRACES_DIR    = "traces_train"
 INFER_TRACES_DIR    = "traces_infer"
 PKL_TRACES_FILENAME = "processed_graphs.pkl"
@@ -43,40 +41,28 @@ def parse_args() -> argparse.Namespace:
 
 def convert_h5_to_traces(
     h5_path: str,
-    output_dir: str,
-    mapping_path: str = SYSCALL_MAPPING_PATH
+    output_dir: str
 ) -> None:
     """
-    Converts sequences of syscall IDs from an H5 file back into human-readable trace files using a syscall mapping.
+    Converts sequences of syscall IDs from an H5 file into trace files with numeric IDs, space-separated on one line.
 
     Args:
         h5_path (str): Path to the input H5 file containing syscall sequences.
         output_dir (str): Directory where the generated trace files will be saved.
-        mapping_path (str): The path to the CSV mapping (syscall names to IDs) to revers
-                            the IDs from.
     """
-    syscall_map = {}
-    with open(mapping_path, "r") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if len(row) >= 2:
-                syscall_map[int(row[1])] = row[0]
-
     os.makedirs(output_dir, exist_ok=True)
     counter = len(os.listdir(output_dir))
     with h5py.File(h5_path, "r") as h5f:
         sequences = h5f["sequences"]
         for seq in sequences:
-            syscall_names = [syscall_map.get(int(sid), f"unknown_{sid}") for sid in seq]
-            if len(syscall_names) < 2:
+            if len(seq) < 2:
                 # skip sequences with one or zero syscalls as they cannot be
                 # used to build a graph
                 continue
             trace_path = os.path.join(output_dir, f"trace_{counter}.txt")
-            logging.debug(f"Writing {trace_path} with {len(syscall_names)} syscalls")
+            logging.debug(f"Writing {trace_path} with {len(seq)} syscalls")
             with open(trace_path, "w") as f:
-                for name in syscall_names:
-                    f.write(f"{name}(\n") # one per line with '(' to match expected format
+                f.write(" ".join(str(id) for id in seq))
             counter += 1
 
 def preprocess_traces_to_graphs_train() -> None:
