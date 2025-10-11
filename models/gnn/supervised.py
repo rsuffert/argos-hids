@@ -1,7 +1,6 @@
 """Training script for a supervised GNN model to be used for the Argos HIDS project."""
 
 import os
-import csv
 import h5py
 import logging
 import argparse
