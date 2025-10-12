@@ -116,7 +116,7 @@ class GNNAutoencoder(nn.Module):
         device = next(self.parameters()).device
         with torch.no_grad():
             # reconstruct the sequence
-            graph, _ = self.encoder.encode(sequence.tolist())
+            graph, _ = self.encoder.encoder.encode(sequence.tolist())
             batch = torch.zeros(graph.num_nodes, dtype=torch.long).to(device)
             reconstructed, _ = self.forward(
                 graph.x.to(device),
