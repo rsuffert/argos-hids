@@ -5,13 +5,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F # noqa: N812
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Dict
 from torch_geometric.loader import DataLoader
 from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from lib.data import load_dataset, CustomGraphDataset
 from lib.models import GNNModel
 from lib.utils import set_random_seeds
+
+SAVE_MODEL_PATH = "gnn-autoencoder.pt"
 
 class GNNAutoencoder(nn.Module):
     """
@@ -28,6 +30,7 @@ class GNNAutoencoder(nn.Module):
     def __init__(
         self,
         vocab_size: int,
+        vocab: Dict[int, int],
         embedding_dim: int,
         in_channels: int,
         hidden_channels: int,
@@ -40,6 +43,7 @@ class GNNAutoencoder(nn.Module):
 
         Args:
             vocab_size (int): Size of the vocabulary for node features.
+            vocab (int): The vocabulary itself for node features.
             embedding_dim (int): Dimension of the node embeddings.
             in_channels (int): Number of input node features.
             hidden_channels (int): Number of hidden units in the encoder and decoder.
@@ -50,6 +54,8 @@ class GNNAutoencoder(nn.Module):
         """
         super(GNNAutoencoder, self).__init__()
 
+        self.threshold = 0.0 # will be overwritten after training
+
         self.encoder = GNNModel(
             vocab_size=vocab_size,
             embedding_dim=embedding_dim,
@@ -59,7 +65,8 @@ class GNNAutoencoder(nn.Module):
             out_channels=hidden_channels,
             dropout=dropout,
             act="relu",
-            model_type=model_type
+            model_type=model_type,
+            vocab=vocab
         )
 
         self.decoder = nn.Sequential(
@@ -92,6 +99,41 @@ class GNNAutoencoder(nn.Module):
         node_embeddings = graph_embeddings[batch]
         reconstructed = self.decoder(node_embeddings)
         return reconstructed, graph_embeddings
+    
+    def predict(self, sequence: torch.Tensor) -> bool:
+        """
+        Classifies the given syscall sequence, represented as a PyTorch tensor.
+
+        Args:
+            sequence (torch.Tensor): The unidimensional sequence of syscall IDs for the model to classify.
+                                     The IDs are already mapped to the values expected by the model.
+        
+        Returns:
+            bool: True if the sequence is malicious; False otherwise.
+        """
+        if sequence.dim() != 1:
+            raise ValueError("Input sequence must be a 1D tensor of syscall IDs.")
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            # reconstruct the sequence
+            graph, _ = self.encoder.encode(sequence.tolist())
+            batch = torch.zeros(graph.num_nodes, dtype=torch.long).to(device)
+            reconstructed, _ = self.forward(
+                graph.x.to(device),
+                graph.edge_index.to(device),
+                batch
+            )
+
+            # calculate the reconstruction error
+            node_errors = F.mse_loss(
+                reconstructed,
+                graph.x.to(device),
+                reduction="none"
+            ).mean(dim=1)
+            graph_error = node_errors.mean().item()
+
+            # malicious if the reconstruction error exceeds the threshold
+            return graph_error > self.threshold
 
 def train_epoch(
     model: nn.Module,
@@ -284,7 +326,7 @@ def main() -> None:
     set_random_seeds()
 
     print("Loading datasets...")
-    train_data, vocab_size, _ = load_dataset(args.train_dataset)
+    train_data, vocab_size, vocab = load_dataset(args.train_dataset)
     test_data, _, _ = load_dataset(args.test_dataset)
 
     train_graphs = [d["graph"] for d in train_data if d["label"] == "normal"]
@@ -307,6 +349,7 @@ def main() -> None:
     print("Initializing model...")
     model = GNNAutoencoder(
         vocab_size=vocab_size,
+        vocab=vocab,
         embedding_dim=args.embedding_dim,
         in_channels=train_dataset[0].num_node_features,
         hidden_channels=args.hidden_channels,
@@ -327,6 +370,12 @@ def main() -> None:
 
     print("Evaluating on test dataset...")
     evaluate_on_test(model, test_loader, threshold, device)
+
+    # save the model
+    model.threshold = threshold
+    model.eval()
+    torch.save(model, SAVE_MODEL_PATH)
+    print(f"Model saved to {SAVE_MODEL_PATH}")
 
 if __name__ == "__main__":
     main()
