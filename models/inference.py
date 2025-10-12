@@ -76,7 +76,7 @@ class ModelSingleton:
         if cls._instance and cls._device:
             return # Singleton instance already initialized
         device = DeviceType.CUDA if torch.cuda.is_available() else DeviceType.CPU
-        model = torch.jit.load(path) if is_torchscript(path) else torch.load(path)
+        model = torch.jit.load(path) if is_torchscript(path) else torch.load(path, weights_only=False)
         model.eval()
         model.to(device.value)
         ensure_predicter(model)
