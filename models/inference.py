@@ -1,12 +1,8 @@
 """Factory for PyTorch models to be used for syscall sequences inference."""
 
 import torch
-import zipfile
-import inspect
 from enum import Enum
 from typing import Tuple, List, Optional, Protocol, cast
-from gnn.lib.models.models import GNNModel
-from gnn.autoencoder import GNNAutoencoder
 
 class DeviceType(Enum):
     """Represents a PyTorch device type."""
@@ -41,60 +37,6 @@ def ensure_predicter(obj: object) -> None:
             "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
         )
 
-def is_torchscript(pt_file: str) -> bool:
-    """
-    Checks whether or not a .pt file was saved as TorchScript.
-
-    Args:
-        pt_file (str): The path to the file to be checked.
-    
-    Returns:
-        bool: True if the file was saved with TorchScript; False otherwise.
-    """
-    if not pt_file.endswith(".pt"):
-        return False
-    try:
-        with zipfile.ZipFile(pt_file, "r") as zf:
-            has_constants_pkl = any("constants.pkl" in name for name in zf.namelist())
-            has_code_dir = any("code/" in name for name in zf.namelist())
-        return has_constants_pkl and has_code_dir
-    except zipfile.BadZipFile:
-        return False
-    
-def load_model_from_dict(pt_file: str) -> torch.nn.Module:
-    """
-    Loads a trained model from a .pt file containing its dictionary representation
-    with its class name, constructor arguments, and state dictionary. This is meant
-    to be used by models that cannot be saved through TorchScript self-contained
-    files, generally because they contain non-scriptable attributes. Therefore,
-    manual loading is required.
-
-    Args:
-        pt_file (str): The path to the .pt file to load.
-
-    Returns:
-        torch.nn.Module: The reconstructred model loaded from the dictionary
-                         contained in the given .pt file.
-    """
-    model_dict = torch.load(pt_file)
-    match model_dict.get("model_class"):
-        case GNNModel.__name__:
-            constructor_args_names = inspect.signature(GNNModel.__init__).parameters.keys()
-            constructor_args_kv = {k: v for k, v in model_dict.items() if k in constructor_args_names}
-            model = GNNModel(**constructor_args_kv)
-            model.load_state_dict(model_dict["state_dict"])
-            return model
-        case GNNAutoencoder.__name__:
-            constructor_args_names = inspect.signature(GNNAutoencoder.__init__).parameters.keys()
-            constructor_args_kv = {k: v for k, v in model_dict.items() if k in constructor_args_names}
-            model = GNNAutoencoder(**constructor_args_kv)
-            model.load_state_dict(model_dict["state_dict"])
-            return model
-        case _:
-            raise ValueError(
-                f"No handler implemented for loading custom model of class {model_dict.get("model_class")}"
-            )
-
 class ModelSingleton:
     """Represents a generic PyTorch neural network Singleton model instance."""
     _instance: Optional[Predicter] = None
@@ -113,7 +55,7 @@ class ModelSingleton:
         if cls._instance and cls._device:
             return # Singleton instance already initialized
         device = DeviceType.CUDA if torch.cuda.is_available() else DeviceType.CPU
-        model = torch.jit.load(path) if is_torchscript(path) else load_model_from_dict(path)
+        model = torch.jit.load(path)
         model.eval()
         model.to(device.value)
         ensure_predicter(model)

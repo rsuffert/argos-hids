@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F # noqa: N812
 import numpy as np
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 from torch_geometric.loader import DataLoader
 from sklearn.metrics import roc_auc_score, confusion_matrix
 
@@ -36,8 +36,7 @@ class GNNAutoencoder(nn.Module):
         hidden_channels: int,
         num_layers: int,
         dropout: float,
-        model_type: str = "GIN",
-        threshold: float = 0.0
+        model_type: str = "GIN"
     ) -> None:
         """
         Initializes the GNNAutoencoder model.
@@ -52,25 +51,10 @@ class GNNAutoencoder(nn.Module):
             dropout (float): Dropout rate applied in the encoder.
             model_type (str, optional): Type of GNN model to use in the encoder (e.g., "GIN", "GCN", "SAGE").
                                         Defaults to "GIN".
-            threshold (float, optional): The reconstruction error threshold over which sequences
-                                         should be considered anomalous. It only needs to be supplied
-                                         to the constructor when construction for inference; for training,
-                                         the attribute should be calculated and manually set via self.threshold.
         """
-        # NOTE: if the constructor signature is updated, also update the saving
-        # of attributes below and the 'to_dict' function!
-
         super(GNNAutoencoder, self).__init__()
 
-        self.vocab_size = vocab
-        self.vocab = vocab
-        self.embedding_dim = embedding_dim
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.num_layers = num_layers
-        self.dropout = dropout
-        self.model_type = model_type
-        self.threshold = threshold
+        self.threshold = 0.0 # will be overwritten after training
 
         self.encoder = GNNModel(
             vocab_size=vocab_size,
@@ -150,35 +134,6 @@ class GNNAutoencoder(nn.Module):
 
             # malicious if the reconstruction error exceeds the threshold
             return graph_error > self.threshold
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Serializes the model to a dictionary containing its configuration and state.
-        This can be saved with torch.save() and later loaded to reconstruct the model.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing:
-                            (1) The "model_class" key set to self.__class__.__name__;
-                            (2) The "state_dict" key set to self.state_dict();
-                            (3) The key-value pairs matching the value supplied to the constructor.
-        """
-        # NOTE: The keys to this dictionary must match the constructor arguments exactly.
-        return {
-            # model clas
-            "model_class": self.__class__.__name__,
-            # constructor arguments
-            "vocab_size": self.vocab_size,
-            "vocab": self.vocab,
-            "embedding_dim": self.embedding_dim,
-            "in_channels": self.in_channels,
-            "hidden_channels": self.hidden_channels,
-            "num_layers": self.num_layers,
-            "dropout": self.dropout,
-            "model_type": self.model_type,
-            "threshold": self.threshold,
-            # trained state (weights etc.)
-            "state_dict": self.state_dict(),
-        }
 
 def train_epoch(
     model: nn.Module,
@@ -419,7 +374,7 @@ def main() -> None:
     # save the model
     model.threshold = threshold
     model.eval()
-    torch.save(model.to_dict(), SAVE_MODEL_PATH)
+    torch.save(model, SAVE_MODEL_PATH)
     print(f"Model saved to {SAVE_MODEL_PATH}")
 
 if __name__ == "__main__":
