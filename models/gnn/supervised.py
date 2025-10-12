@@ -92,7 +92,7 @@ def train_gnn_model() -> None:
         "--model", "GIN",
         "--epochs", "250",
         "--batch_size", "256",
-        "--save_model_path", os.path.join("..", "gnn.pt") # will save to current wd
+        "--save_model_path", "gnn.pt"
     ], check=True)
 
 if __name__ == "__main__":
