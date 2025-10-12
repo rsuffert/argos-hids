@@ -77,8 +77,7 @@ def load_model_from_dict(pt_file: str) -> torch.nn.Module:
                          contained in the given .pt file.
     """
     model_dict = torch.load(pt_file)
-    model_class = model_dict.get("model_class")
-    match model_class:
+    match model_dict.get("model_class"):
         case GNNModel.__name__:
             constructor_args_names = inspect.signature(GNNModel.__init__).parameters.keys()
             constructor_args_kv = {k: v for k, v in model_dict.items() if k in constructor_args_names}
@@ -93,7 +92,7 @@ def load_model_from_dict(pt_file: str) -> torch.nn.Module:
             return model
         case _:
             raise ValueError(
-                f"No handler implemented for loading custom model of class {model_class}"
+                f"No handler implemented for loading custom model of class {model_dict.get("model_class")}"
             )
 
 class ModelSingleton:
