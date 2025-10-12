@@ -91,7 +91,8 @@ def train_gnn_model() -> None:
         "--dataset_path", f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}",
         "--model", "GIN",
         "--epochs", "250",
-        "--batch_size", "256"
+        "--batch_size", "256",
+        "--save_model_path", os.path.join("..", "gnn.pt") # will save to current wd
     ], check=True)
 
 if __name__ == "__main__":
