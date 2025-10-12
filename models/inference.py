@@ -1,6 +1,7 @@
 """Factory for PyTorch models to be used for syscall sequences inference."""
 
 import torch
+import zipfile
 from enum import Enum
 from typing import Tuple, List, Optional, Protocol, cast
 
@@ -37,6 +38,26 @@ def ensure_predicter(obj: object) -> None:
             "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
         )
 
+
+def is_torchscript(pt_file: str) -> bool:
+    """
+    Checks whether or not a .pt file was saved as TorchScript.
+    Args:
+        pt_file (str): The path to the file to be checked.
+    
+    Returns:
+        bool: True if the file was saved with TorchScript; False otherwise.
+    """
+    if not pt_file.endswith(".pt"):
+        return False
+    try:
+        with zipfile.ZipFile(pt_file, "r") as zf:
+            has_constants_pkl = any("constants.pkl" in name for name in zf.namelist())
+            has_code_dir = any("code/" in name for name in zf.namelist())
+        return has_constants_pkl and has_code_dir
+    except zipfile.BadZipFile:
+        return False
+
 class ModelSingleton:
     """Represents a generic PyTorch neural network Singleton model instance."""
     _instance: Optional[Predicter] = None
@@ -55,7 +76,7 @@ class ModelSingleton:
         if cls._instance and cls._device:
             return # Singleton instance already initialized
         device = DeviceType.CUDA if torch.cuda.is_available() else DeviceType.CPU
-        model = torch.jit.load(path)
+        model = torch.jit.load(path) if is_torchscript(path) else torch.load(path)
         model.eval()
         model.to(device.value)
         ensure_predicter(model)
