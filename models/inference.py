@@ -3,6 +3,7 @@
 import torch
 import zipfile
 from enum import Enum
+from torch.package import PackageImporter
 from typing import Tuple, List, Optional, Protocol, cast
 
 class DeviceType(Enum):
@@ -76,7 +77,11 @@ class ModelSingleton:
         if cls._instance and cls._device:
             return # Singleton instance already initialized
         device = DeviceType.CUDA if torch.cuda.is_available() else DeviceType.CPU
-        model = torch.jit.load(path) if is_torchscript(path) else torch.load(path, weights_only=False)
+        model = (
+            torch.jit.load(path)
+            if is_torchscript(path)
+            else PackageImporter(path).load_pickle("model", "model.pkl")
+        )
         model.eval()
         model.to(device.value)
         ensure_predicter(model)
@@ -111,5 +116,5 @@ class ModelSingleton:
             bool: True if the sequence is classified as malicious, False otherwise.
         """
         model, device = cls.get()
-        seq_tensor = torch.tensor(sequence, dtype=torch.float32).to(device.value)
+        seq_tensor = torch.tensor(sequence).to(device.value)
         return model.predict(seq_tensor)
