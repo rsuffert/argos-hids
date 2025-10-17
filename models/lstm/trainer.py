@@ -162,6 +162,7 @@ class LSTMClassifier(pl.LightningModule):
         if sequence.dim() != 1:
             raise ValueError("Input sequence must be a 1D tensor of syscall IDs.")
         seq_len = sequence.shape[0]
+        sequence = sequence.float() # convert to float for compatibility with LSTM layer
         sequence = sequence.unsqueeze(0).unsqueeze(-1) # add batch and feature dimensions: (1, seq_len, 1)
         lengths = torch.tensor([seq_len], dtype=torch.long, device=sequence.device)
         with torch.no_grad():
