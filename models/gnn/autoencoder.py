@@ -8,10 +8,11 @@ import numpy as np
 from typing import Tuple, Dict
 from torch_geometric.loader import DataLoader
 from sklearn.metrics import roc_auc_score, confusion_matrix
+from torch.package import PackageExporter
 
-from lib.data import load_dataset, CustomGraphDataset
-from lib.models import GNNModel
-from lib.utils import set_random_seeds
+from lib.data.dataset import load_dataset, CustomGraphDataset
+from lib.models.models import GNNModel
+from lib.utils.utils import set_random_seeds
 
 SAVE_MODEL_PATH = "gnn-autoencoder.pt"
 
@@ -316,6 +317,9 @@ def parse_arguments() -> argparse.Namespace:
                         help="Learning rate")
     parser.add_argument("--target_fpr", type=float, default=0.05,
                         help="Target false positive rate for threshold calibration")
+
+    parser.add_argument("--save_model_path", type=str, default="gnn-autoencoder.pt",
+                        help="File where the trained model should be saved to.")
     
     return parser.parse_args()
 
@@ -374,8 +378,23 @@ def main() -> None:
     # save the model
     model.threshold = threshold
     model.eval()
-    torch.save(model, SAVE_MODEL_PATH)
-    print(f"Model saved to {SAVE_MODEL_PATH}")
+    with PackageExporter(args.save_model_path) as exporter:
+        exporter.intern("lib.models.**")
+        exporter.intern("lib.data.**")
+        exporter.intern("lib.preprocessing.**")
+        exporter.intern("lib.utils.**")
+        exporter.intern("preprocessing.**")
+        exporter.intern("__main__")
+        exporter.extern("torch_geometric.**")
+        exporter.extern("matplotlib.**")
+        exporter.extern("networkx.**")
+        exporter.extern("numpy.**")
+        exporter.extern("_operator.**")
+        exporter.extern("sklearn.**")
+        exporter.extern("seaborn.**")
+        exporter.extern("tokenizers.**")
+        exporter.save_pickle("model", "model.pkl", model)
+    print(f"Model saved to {args.save_model_path}")
 
 if __name__ == "__main__":
     main()
