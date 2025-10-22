@@ -28,4 +28,4 @@ This folder contains the implementation and related files for the LSTM (Long Sho
     poetry run python3 trainer.py
     ```
 
-The trainer script will take care of automatically saving the model of the best epoch (according to F1 score on the validation set) to the `./lightning_logs/version_X` folder for each execution of the trainer script.
+The trainer script will take care of automatically saving the model of the best epoch (according to F1 score on the validation set) to the `./lstm.pt` file.

@@ -37,10 +37,11 @@ Apart from that setup, you also need to ensure the required environment variable
 
 ### Execution Commands
 
-After the environment is properly configured, in order to run the system, you need to first make sure the required dependencies are installed.
+After the environment is properly configured, in order to run the system, you need to first make sure the required dependencies are installed and the git submodules are initialized.
 
 ```bash
 poetry install
+git submodule update --init --recursive
 ```
 
 Then, you may start the system.

@@ -1,0 +1,5 @@
+# Extracted traces from H5 files
+traces_*/
+
+# Pre-processed traces to graph format
+*.pkl
