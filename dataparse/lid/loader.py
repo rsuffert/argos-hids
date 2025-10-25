@@ -193,75 +193,102 @@ class LIDDatasetLoader:
         zip_path, syscall_dict = args
         
         try:
-            # Extract metadata
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                metadata_files = [f for f in zf.namelist() if f.endswith(".json")]
-                if not metadata_files:
-                    return None, None
-                
-                with zf.open(metadata_files[0]) as mf:
-                    metadata = json.load(mf)
+            metadata = self._extract_metadata(zip_path)
+            if metadata is None:
+                return None, None
             
             label = 1 if metadata.get("exploit") else 0
-            attack_ts = None
+            attack_ts = self._get_attack_timestamp(metadata, label)
             
-            if label:
-                exploit_info = metadata.get("time", {}).get("exploit", [])
-                if exploit_info and "absolute" in exploit_info[0]:
-                    attack_ts = int(str(exploit_info[0]["absolute"]).split(".")[0])
-            
-            # Parse syscalls
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
-                if not syscall_files:
-                    return None, None
-                
-                with zf.open(syscall_files[0]) as sf:
-                    lines = sf.readlines()
-            
-            parsed_syscalls = []
-            for line in lines:
-                try:
-                    timestamp = int(str(line.split()[0].decode()).split(".")[0])
-                    syscall_name = line.split()[5].decode()
-                    parsed_syscalls.append((timestamp, syscall_name))
-                except (IndexError, UnicodeDecodeError):
-                    continue
-            
+            parsed_syscalls = self._parse_syscalls(zip_path)
             if not parsed_syscalls:
                 return None, None
             
-            # Create sequences
-            sequences = []
-            if label and attack_ts:
-                # Attack: start from attack timestamp
-                start_idx = 0
-                for idx, (ts, _) in enumerate(parsed_syscalls):
-                    if ts >= attack_ts:
-                        start_idx = idx
-                        break
-                
-                syscall_names = [name for _, name in parsed_syscalls[start_idx:]]
-                sequence = [syscall_dict[name] for name in syscall_names if name in syscall_dict]
-                if sequence:
-                    sequences.append(sequence[:self.WINDOW_SIZE])
-            else:
-                # Normal: sliding windows
-                for i in range(0, len(parsed_syscalls), self.WINDOW_SIZE):
-                    chunk = parsed_syscalls[i:i + self.WINDOW_SIZE]
-                    if len(chunk) < self.MIN_CHUNK_SIZE and i > 0:
-                        continue
-                    
-                    syscall_names = [name for _, name in chunk]
-                    sequence = [syscall_dict[name] for name in syscall_names if name in syscall_dict]
-                    if sequence:
-                        sequences.append(sequence)
-            
+            sequences = self._create_sequences(parsed_syscalls, label, attack_ts, syscall_dict)
             return label, sequences
             
         except Exception as e:
             print(f"Warning: Failed to process {zip_path}: {e}")
             return None, None
+
+    def _extract_metadata(self, zip_path: str) -> Optional[Dict]:
+        """Extract metadata from ZIP file."""
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            metadata_files = [f for f in zf.namelist() if f.endswith(".json")]
+            if not metadata_files:
+                return None
+            
+            with zf.open(metadata_files[0]) as mf:
+                return json.load(mf)
+
+    def _get_attack_timestamp(self, metadata: Dict, label: int) -> Optional[int]:
+        """Get attack timestamp from metadata."""
+        if not label:
+            return None
+        
+        exploit_info = metadata.get("time", {}).get("exploit", [])
+        if not exploit_info or "absolute" not in exploit_info[0]:
+            return None
+        
+        return int(str(exploit_info[0]["absolute"]).split(".")[0])
+
+    def _parse_syscalls(self, zip_path: str) -> List[Tuple[int, str]]:
+        """Parse syscalls from ZIP file."""
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
+            if not syscall_files:
+                return []
+            
+            with zf.open(syscall_files[0]) as sf:
+                lines = sf.readlines()
+        
+        parsed_syscalls = []
+        for line in lines:
+            try:
+                timestamp = int(str(line.split()[0].decode()).split(".")[0])
+                syscall_name = line.split()[5].decode()
+                parsed_syscalls.append((timestamp, syscall_name))
+            except (IndexError, UnicodeDecodeError):
+                continue
+        
+        return parsed_syscalls
+
+    def _create_sequences(self, parsed_syscalls: List[Tuple[int, str]], label: int, 
+                         attack_ts: Optional[int], syscall_dict: Dict[str, int]) -> List[List[int]]:
+        """Create sequences from parsed syscalls."""
+        if label and attack_ts:
+            return self._create_attack_sequences(parsed_syscalls, attack_ts, syscall_dict)
+        return self._create_normal_sequences(parsed_syscalls, syscall_dict)
+
+    def _create_attack_sequences(self, parsed_syscalls: List[Tuple[int, str]], 
+                               attack_ts: int, syscall_dict: Dict[str, int]) -> List[List[int]]:
+        """Create sequences for attack data starting from attack timestamp."""
+        start_idx = 0
+        for idx, (ts, _) in enumerate(parsed_syscalls):
+            if ts >= attack_ts:
+                start_idx = idx
+                break
+        
+        syscall_names = [name for _, name in parsed_syscalls[start_idx:]]
+        sequence = [syscall_dict[name] for name in syscall_names if name in syscall_dict]
+        
+        return [sequence[:self.WINDOW_SIZE]] if sequence else []
+
+    def _create_normal_sequences(self, parsed_syscalls: List[Tuple[int, str]], 
+                               syscall_dict: Dict[str, int]) -> List[List[int]]:
+        """Create sequences for normal data using sliding windows."""
+        sequences = []
+        for i in range(0, len(parsed_syscalls), self.WINDOW_SIZE):
+            chunk = parsed_syscalls[i:i + self.WINDOW_SIZE]
+            if len(chunk) < self.MIN_CHUNK_SIZE and i > 0:
+                continue
+            
+            syscall_names = [name for _, name in chunk]
+            sequence = [syscall_dict[name] for name in syscall_names if name in syscall_dict]
+            if sequence:
+                sequences.append(sequence)
+        
+        return sequences
     
     def _process_all_files(
         self, zip_files: List[str], syscall_dict: Dict[str, int]
