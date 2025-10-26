@@ -1,14 +1,6 @@
 """
-Module for processing the LID-DS dataset.
-
-This module provides functionality to convert LID-DS syscall datasets into ML-ready HDF5 format.
-It processes syscall traces from LID-DS scenarios and creates high-signal sequences for training.
-
-For attack files, it extracts all syscalls from the attack timestamp onward. For normal files,
-it processes the entire file into sequential 1024-syscall windows using a sliding window approach.
-
-The processed data is split into training/validation/test sets and saved in HDF5 format compatible
-with the DongTing dataset format for seamless integration with machine learning workflows.
+LID-DS dataset loader for converting syscall traces to ML-ready HDF5 format.
+Processes attack and normal data with different strategies for optimal training.
 """
 
 import os
@@ -22,24 +14,12 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import sys
 
-# Add dataparse directory to path to import from dongting
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
 from dongting.loader import append_seq_to_h5
 
 
 def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: str = "") -> None:
-    """
-    Save multiple sequences to H5 file using DongTing's format.
-    
-    Creates an HDF5 file with variable-length sequences using gzip compression.
-    This ensures compatibility with the DongTing dataset format and efficient storage.
-    
-    Args:
-        sequences: List of syscall sequences (each sequence is a list of syscall ID)
-        filepath: Path where the H5 file will be saved
-        label_name: Descriptive name for logging purposes (e.g., "attack training")
-    """
+    """Save sequences to H5 file using DongTing's format."""
     if not sequences:
         print(f"No sequences to save for {label_name}")
         return
@@ -47,7 +27,6 @@ def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: 
     print(f"Saving {len(sequences)} {label_name} sequences to {filepath}")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
-    # Remove existing file to start fresh
     if os.path.exists(filepath):
         os.remove(filepath)
     
@@ -56,23 +35,7 @@ def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: 
 
 
 class LIDDatasetLoader:
-    """
-    Main class for loading and processing LID dataset.
-    
-    This class handles the complete pipeline from raw LID-DS ZIP files to processed HDF5 files.
-    It builds syscall dictionaries, processes files in parallel, extracts meaningful sequences,
-    and saves the results in a format ready for machine learning training.
-    
-    The loader implements different strategies for attack vs normal data:
-    - Attack data: Extracts sequences starting from the attack timestamp
-    - Normal data: Uses sliding windows to capture comprehensive behavior patterns
-    
-    Attributes:
-        WINDOW_SIZE: Maximum size for syscall sequences (1024)
-        TRAIN_RATIO: Proportion of data for training (0.6)
-        VAL_RATIO: Proportion of data for validation (0.2)
-        MIN_CHUNK_SIZE: Minimum size for sequence chunks (50)
-    """
+    """Load and process LID dataset to HDF5 format."""
     
     WINDOW_SIZE = 1024
     TRAIN_RATIO = 0.6
@@ -80,38 +43,15 @@ class LIDDatasetLoader:
     MIN_CHUNK_SIZE = 50
     
     def __init__(self, data_dir: Optional[str] = None) -> None:
-        """
-        Initialize the LID dataset loader.
-        
-        Sets up paths and configuration for dataset processing. The data directory
-        can be specified explicitly or through the LID_DATA_DIR environment variable.
-        
-        Args:
-            data_dir: Directory containing LID dataset files. If None, uses LID_DATA_DIR 
-                     environment variable or defaults to "lid-data".
-        """
-        self.data_dir: str = data_dir or os.getenv("LID_DATA_DIR") or "lid-data"
+        """Initialize loader with data directory."""
+        self.data_dir = data_dir or os.getenv("LID_DATA_DIR") or "lid-data"
         self.syscall_dict_path = os.path.join(self.data_dir, "syscall_dict.pkl")
     
     def process_dataset(self) -> None:
-        """
-        Main method to process the entire dataset.
-        
-        Orchestrates the complete processing pipeline:
-        1. Discovers ZIP files in the data directory
-        2. Builds or loads syscall dictionary
-        3. Processes all files in parallel
-        4. Splits data into train/validation/test sets
-        5. Saves results to HDF5 files
-        
-        The method provides progress updates and statistics throughout the process.
-        """
+        """Main processing pipeline."""
         print("Starting LID-DS Loader")
         
-        zip_files = [str(p) for p in Path(self.data_dir).rglob("*.zip") 
-                    if "__MACOSX" not in str(p)]
-        print(f"Found {len(zip_files)} ZIP files")
-        
+        zip_files = self._find_zip_files()
         if not zip_files:
             print("No ZIP files found. Please check your data directory.")
             return
@@ -124,34 +64,28 @@ class LIDDatasetLoader:
         self._save_to_h5(splits)
         print("Dataset processing completed")
     
+    def _find_zip_files(self) -> List[str]:
+        """Find ZIP files in data directory."""
+        zip_files = [str(p) for p in Path(self.data_dir).rglob("*.zip") 
+                    if "__MACOSX" not in str(p)]
+        print(f"Found {len(zip_files)} ZIP files")
+        return zip_files
+    
     def _build_syscall_dict(self, zip_paths: List[str]) -> Dict[str, int]:
-        """
-        Build syscall dictionary from ZIP files.
-        
-        Creates a mapping from syscall names to integer IDs. This dictionary is cached
-        to disk for reuse across runs. The method scans all ZIP files to collect
-        unique syscall names and assigns sequential integer IDs.
-        
-        Args:
-            zip_paths: List of paths to ZIP files containing syscall data
-            
-        Returns:
-            Dictionary mapping syscall names to integer IDs
-        """
+        """Build or load syscall dictionary."""
         if os.path.exists(self.syscall_dict_path):
             return self._load_cached_dict()
-        
         return self._create_new_dict(zip_paths)
 
     def _load_cached_dict(self) -> Dict[str, int]:
-        """Load existing syscall dictionary from cache."""
-        with open(self.syscall_dict_path, "rb") as f_read:
-            syscall_dict = pickle.load(f_read)
+        """Load cached syscall dictionary."""
+        with open(self.syscall_dict_path, "rb") as f:
+            syscall_dict = pickle.load(f)
         print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
         return syscall_dict
 
     def _create_new_dict(self, zip_paths: List[str]) -> Dict[str, int]:
-        """Create new syscall dictionary by scanning ZIP files."""
+        """Create new syscall dictionary."""
         print("Building new syscall dictionary...")
         all_syscalls = set()
         
@@ -169,7 +103,7 @@ class LIDDatasetLoader:
         return syscall_dict
 
     def _extract_syscalls_from_zip(self, zip_path: str) -> set:
-        """Extract unique syscall names from a single ZIP file."""
+        """Extract syscalls from ZIP file."""
         syscalls: set[str] = set()
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -188,20 +122,20 @@ class LIDDatasetLoader:
         return syscalls
 
     def _parse_syscall_name(self, line: bytes) -> Optional[str]:
-        """Parse syscall name from a single line of syscall data."""
+        """Parse syscall name from line."""
         try:
             return line.split()[5].decode()
         except (IndexError, UnicodeDecodeError):
             return None
 
     def _save_dict_to_cache(self, syscall_dict: Dict[str, int]) -> None:
-        """Save syscall dictionary to cache file."""
+        """Save dictionary to cache."""
         os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
-        with open(self.syscall_dict_path, "wb") as f_write:
-            pickle.dump(syscall_dict, f_write)
+        with open(self.syscall_dict_path, "wb") as f:
+            pickle.dump(syscall_dict, f)
     
     def _process_zip_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], Optional[List[List[int]]]]:
-        """Process a single ZIP file."""
+        """Process single ZIP file."""
         zip_path, syscall_dict = args
         
         try:
@@ -214,10 +148,8 @@ class LIDDatasetLoader:
             print(f"Warning: Failed to process {zip_path}: {e}")
             return None, None
 
-    def _process_valid_zip(
-        self, zip_path: str, metadata: Dict, syscall_dict: Dict[str, int]
-    ) -> Tuple[int, List[List[int]]]:
-        """Process a validated ZIP file with metadata."""
+    def _process_valid_zip(self, zip_path: str, metadata: Dict, syscall_dict: Dict[str, int]) -> Tuple[int, List[List[int]]]:
+        """Process validated ZIP file."""
         label = 1 if metadata.get("exploit") else 0
         attack_ts = self._get_attack_timestamp(metadata, label)
         
@@ -229,7 +161,7 @@ class LIDDatasetLoader:
         return label, sequences
 
     def _extract_metadata(self, zip_path: str) -> Optional[Dict]:
-        """Extract metadata from ZIP file."""
+        """Extract metadata from ZIP."""
         with zipfile.ZipFile(zip_path, "r") as zf:
             metadata_files = [f for f in zf.namelist() if f.endswith(".json")]
             if not metadata_files:
@@ -239,7 +171,7 @@ class LIDDatasetLoader:
                 return json.load(mf)
 
     def _get_attack_timestamp(self, metadata: Dict, label: int) -> Optional[int]:
-        """Get attack timestamp from metadata."""
+        """Get attack timestamp."""
         if not label:
             return None
         
@@ -250,7 +182,7 @@ class LIDDatasetLoader:
         return int(str(exploit_info[0]["absolute"]).split(".")[0])
 
     def _parse_syscalls(self, zip_path: str) -> List[Tuple[int, str]]:
-        """Parse syscalls from ZIP file."""
+        """Parse syscalls from ZIP."""
         with zipfile.ZipFile(zip_path, "r") as zf:
             syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
             if not syscall_files:
@@ -259,27 +191,27 @@ class LIDDatasetLoader:
             with zf.open(syscall_files[0]) as sf:
                 lines = sf.readlines()
         
-        parsed_syscalls = []
+        parsed = []
         for line in lines:
             try:
                 timestamp = int(str(line.split()[0].decode()).split(".")[0])
                 syscall_name = line.split()[5].decode()
-                parsed_syscalls.append((timestamp, syscall_name))
+                parsed.append((timestamp, syscall_name))
             except (IndexError, UnicodeDecodeError):
                 continue
         
-        return parsed_syscalls
+        return parsed
 
     def _create_sequences(self, parsed_syscalls: List[Tuple[int, str]], label: int, 
                          attack_ts: Optional[int], syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """Create sequences from parsed syscalls."""
+        """Create sequences from syscalls."""
         if label and attack_ts:
             return self._create_attack_sequences(parsed_syscalls, attack_ts, syscall_dict)
         return self._create_normal_sequences(parsed_syscalls, syscall_dict)
 
     def _create_attack_sequences(self, parsed_syscalls: List[Tuple[int, str]], 
                                attack_ts: int, syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """Create sequences for attack data starting from attack timestamp."""
+        """Create attack sequences."""
         start_idx = 0
         for idx, (ts, _) in enumerate(parsed_syscalls):
             if ts >= attack_ts:
@@ -293,7 +225,7 @@ class LIDDatasetLoader:
 
     def _create_normal_sequences(self, parsed_syscalls: List[Tuple[int, str]], 
                                syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """Create sequences for normal data using sliding windows."""
+        """Create normal sequences."""
         sequences = []
         for i in range(0, len(parsed_syscalls), self.WINDOW_SIZE):
             chunk = parsed_syscalls[i:i + self.WINDOW_SIZE]
@@ -307,27 +239,15 @@ class LIDDatasetLoader:
         
         return sequences
     
-    def _process_all_files(
-        self, zip_files: List[str], syscall_dict: Dict[str, int]
-    ) -> Tuple[List[List[int]], List[int]]:
-        """Process all ZIP files in parallel."""
+    def _process_all_files(self, zip_files: List[str], syscall_dict: Dict[str, int]) -> Tuple[List[List[int]], List[int]]:
+        """Process all files in parallel."""
         print("Processing files...")
         start_time = time.time()
         
-        results = self._run_parallel_processing(zip_files, syscall_dict)
-        sequences, labels = self._collect_results(results)
-        
-        self._print_processing_stats(sequences, labels, start_time)
-        return sequences, labels
-
-    def _run_parallel_processing(self, zip_files: List[str], syscall_dict: Dict[str, int]) -> List:
-        """Run parallel processing of ZIP files."""
         with Pool(cpu_count()) as pool:
             args = [(zip_path, syscall_dict) for zip_path in zip_files]
-            return pool.map(self._process_zip_file, args)
-
-    def _collect_results(self, results: List) -> Tuple[List[List[int]], List[int]]:
-        """Collect and organize processing results."""
+            results = pool.map(self._process_zip_file, args)
+        
         attack_sequences: List[List[int]] = []
         normal_sequences: List[List[int]] = []
         
@@ -338,21 +258,15 @@ class LIDDatasetLoader:
         
         all_sequences = attack_sequences + normal_sequences
         all_labels = [1] * len(attack_sequences) + [0] * len(normal_sequences)
+        
+        elapsed = time.time() - start_time
+        print(f"Found {len(attack_sequences)} attack, {len(normal_sequences)} normal sequences")
+        print(f"Processing completed in {elapsed:.1f} seconds")
+        
         return all_sequences, all_labels
 
-    def _print_processing_stats(self, sequences: List, labels: List, start_time: float) -> None:
-        """Print processing statistics."""
-        attack_count = sum(labels)
-        normal_count = len(labels) - attack_count
-        elapsed = time.time() - start_time
-        
-        print(f"Found {attack_count} attack, {normal_count} normal sequences")
-        print(f"Processing completed in {elapsed:.1f} seconds")
-
-    def _split_data(
-        self, sequences: List[List[int]], labels: List[int]
-    ) -> Dict[str, Tuple[List[List[int]], List[int]]]:
-        """Split data into train/val/test sets with fixed random seed."""
+    def _split_data(self, sequences: List[List[int]], labels: List[int]) -> Dict[str, Tuple[List[List[int]], List[int]]]:
+        """Split data into train/val/test."""
         data = list(zip(sequences, labels, strict=True))
         random.seed(42)
         random.shuffle(data)
@@ -361,30 +275,22 @@ class LIDDatasetLoader:
         train_end = int(total * self.TRAIN_RATIO)
         val_end = train_end + int(total * self.VAL_RATIO)
         
-        return {
-            "training": self._create_split(data[:train_end]),
-            "validation": self._create_split(data[train_end:val_end]),
-            "test": self._create_split(data[val_end:])
-        }
-
-    def _create_split(self, split_data: List) -> Tuple[List[List[int]], List[int]]:
-        """Create a data split from shuffled data."""
-        if not split_data:
-            return [], []
+        splits = {}
+        for name, split_data in [
+            ("training", data[:train_end]),
+            ("validation", data[train_end:val_end]),
+            ("test", data[val_end:])
+        ]:
+            if split_data:
+                seqs, lbls = zip(*split_data, strict=True)
+                splits[name] = (list(seqs), list(lbls))
+            else:
+                splits[name] = ([], [])
         
-        seqs, lbls = zip(*split_data, strict=True)
-        return list(seqs), list(lbls)
+        return splits
     
     def _print_statistics(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
-        """
-        Print statistics for data splits.
-        
-        Displays the number of attack and normal sequences in each split
-        for verification and debugging purposes.
-        
-        Args:
-            splits: Dictionary containing train/validation/test splits
-        """
+        """Print split statistics."""
         print("Data splits:")
         for split_name in ["training", "validation", "test"]:
             seqs, lbls = splits[split_name]
@@ -393,24 +299,13 @@ class LIDDatasetLoader:
             print(f"  {split_name}: {attack_count} attacks, {normal_count} normal")
     
     def _save_to_h5(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
-        """
-        Save data splits to H5 files using DongTing's format.
-        
-        Creates separate HDF5 files for each label-split combination. Files are
-        named using the convention: {label}_{split}.h5 where label is 0 for normal
-        and 1 for attack data.
-        
-        Args:
-            splits: Dictionary containing train/validation/test splits with sequences and labels
-        """
+        """Save splits to H5 files."""
         for split_name in ["training", "validation", "test"]:
             seqs, lbls = splits[split_name]
             
-            # Separate by label
-            attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
-            normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
+            attack_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 1]
+            normal_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 0]
             
-            # Save using DongTing's format
             if attack_seqs:
                 filepath = os.path.join(self.data_dir, f"1_{split_name}.h5")
                 save_sequences_to_h5(attack_seqs, filepath, f"attack {split_name}")
@@ -421,7 +316,7 @@ class LIDDatasetLoader:
 
 
 def main() -> None:
-    """Entry point for the LID dataset loader."""
+    """Entry point."""
     loader = LIDDatasetLoader()
     loader.process_dataset()
 
