@@ -36,7 +36,7 @@ def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: 
     This ensures compatibility with the DongTing dataset format and efficient storage.
     
     Args:
-        sequences: List of syscall sequences (each sequence is a list of syscall IDs)
+        sequences: List of syscall sequences (each sequence is a list of syscall ID)
         filepath: Path where the H5 file will be saved
         label_name: Descriptive name for logging purposes (e.g., "attack training")
     """
@@ -139,40 +139,66 @@ class LIDDatasetLoader:
             Dictionary mapping syscall names to integer IDs
         """
         if os.path.exists(self.syscall_dict_path):
-            with open(self.syscall_dict_path, "rb") as f_read:
-                syscall_dict = pickle.load(f_read)
-            print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
-            return syscall_dict
+            return self._load_cached_dict()
         
+        return self._create_new_dict(zip_paths)
+
+    def _load_cached_dict(self) -> Dict[str, int]:
+        """Load existing syscall dictionary from cache."""
+        with open(self.syscall_dict_path, "rb") as f_read:
+            syscall_dict = pickle.load(f_read)
+        print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
+        return syscall_dict
+
+    def _create_new_dict(self, zip_paths: List[str]) -> Dict[str, int]:
+        """Create new syscall dictionary by scanning ZIP files."""
         print("Building new syscall dictionary...")
         all_syscalls = set()
         
         for i, zip_path in enumerate(zip_paths):
-            if (i + 1) % 10 == 0:  # More frequent updates for small datasets
+            if (i + 1) % 10 == 0:
                 print(f"Processed {i + 1}/{len(zip_paths)} files")
             
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
-                    if syscall_files:
-                        with zf.open(syscall_files[0]) as sf:
-                            for line in sf.readlines():
-                                try:
-                                    syscall_name = line.split()[5].decode()
-                                    all_syscalls.add(syscall_name)
-                                except (IndexError, UnicodeDecodeError):
-                                    continue
-            except Exception as e:
-                print(f"Warning: Failed to process {zip_path}: {e}")
+            syscalls = self._extract_syscalls_from_zip(zip_path)
+            all_syscalls.update(syscalls)
         
         syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
-        
-        os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
-        with open(self.syscall_dict_path, "wb") as f_write:
-            pickle.dump(syscall_dict, f_write)
+        self._save_dict_to_cache(syscall_dict)
         
         print(f"Created dictionary with {len(syscall_dict)} syscalls")
         return syscall_dict
+
+    def _extract_syscalls_from_zip(self, zip_path: str) -> set:
+        """Extract unique syscall names from a single ZIP file."""
+        syscalls: set[str] = set()
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                syscall_files = [f for f in zf.namelist() if f.endswith(".sc")]
+                if not syscall_files:
+                    return syscalls
+                
+                with zf.open(syscall_files[0]) as sf:
+                    for line in sf.readlines():
+                        syscall_name = self._parse_syscall_name(line)
+                        if syscall_name:
+                            syscalls.add(syscall_name)
+        except Exception as e:
+            print(f"Warning: Failed to process {zip_path}: {e}")
+        
+        return syscalls
+
+    def _parse_syscall_name(self, line: bytes) -> Optional[str]:
+        """Parse syscall name from a single line of syscall data."""
+        try:
+            return line.split()[5].decode()
+        except (IndexError, UnicodeDecodeError):
+            return None
+
+    def _save_dict_to_cache(self, syscall_dict: Dict[str, int]) -> None:
+        """Save syscall dictionary to cache file."""
+        os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
+        with open(self.syscall_dict_path, "wb") as f_write:
+            pickle.dump(syscall_dict, f_write)
     
     def _process_zip_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], Optional[List[List[int]]]]:
         """
