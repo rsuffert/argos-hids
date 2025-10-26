@@ -148,7 +148,9 @@ class LIDDatasetLoader:
             print(f"Warning: Failed to process {zip_path}: {e}")
             return None, None
 
-    def _process_valid_zip(self, zip_path: str, metadata: Dict, syscall_dict: Dict[str, int]) -> Tuple[int, List[List[int]]]:
+    def _process_valid_zip(
+        self, zip_path: str, metadata: Dict, syscall_dict: Dict[str, int]
+    ) -> Tuple[int, List[List[int]]]:
         """Process validated ZIP file."""
         label = 1 if metadata.get("exploit") else 0
         attack_ts = self._get_attack_timestamp(metadata, label)
@@ -239,7 +241,9 @@ class LIDDatasetLoader:
         
         return sequences
     
-    def _process_all_files(self, zip_files: List[str], syscall_dict: Dict[str, int]) -> Tuple[List[List[int]], List[int]]:
+    def _process_all_files(
+        self, zip_files: List[str], syscall_dict: Dict[str, int]
+    ) -> Tuple[List[List[int]], List[int]]:
         """Process all files in parallel."""
         print("Processing files...")
         start_time = time.time()
@@ -265,7 +269,9 @@ class LIDDatasetLoader:
         
         return all_sequences, all_labels
 
-    def _split_data(self, sequences: List[List[int]], labels: List[int]) -> Dict[str, Tuple[List[List[int]], List[int]]]:
+    def _split_data(
+        self, sequences: List[List[int]], labels: List[int]
+    ) -> Dict[str, Tuple[List[List[int]], List[int]]]:
         """Split data into train/val/test."""
         data = list(zip(sequences, labels, strict=True))
         random.seed(42)
@@ -303,8 +309,8 @@ class LIDDatasetLoader:
         for split_name in ["training", "validation", "test"]:
             seqs, lbls = splits[split_name]
             
-            attack_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 1]
-            normal_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 0]
+            attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
+            normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
             
             if attack_seqs:
                 filepath = os.path.join(self.data_dir, f"1_{split_name}.h5")
