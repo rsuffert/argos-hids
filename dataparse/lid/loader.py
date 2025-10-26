@@ -201,41 +201,32 @@ class LIDDatasetLoader:
             pickle.dump(syscall_dict, f_write)
     
     def _process_zip_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], Optional[List[List[int]]]]:
-        """
-        Process a single ZIP file.
-        
-        Extracts metadata and syscall traces from a ZIP file, then creates sequences
-        based on whether the file contains attack or normal data. For attack files,
-        sequences start from the attack timestamp. For normal files, sliding windows
-        are used to create multiple sequences.
-        
-        Args:
-            args: Tuple containing (zip_path, syscall_dict)
-            
-        Returns:
-            Tuple of (label, sequences) where label is 0/1 and sequences is a list
-            of syscall ID sequences. Returns (None, None) if processing fails.
-        """
+        """Process a single ZIP file."""
         zip_path, syscall_dict = args
         
         try:
             metadata = self._extract_metadata(zip_path)
-            if metadata is None:
+            if not metadata:
                 return None, None
             
-            label = 1 if metadata.get("exploit") else 0
-            attack_ts = self._get_attack_timestamp(metadata, label)
-            
-            parsed_syscalls = self._parse_syscalls(zip_path)
-            if not parsed_syscalls:
-                return None, None
-            
-            sequences = self._create_sequences(parsed_syscalls, label, attack_ts, syscall_dict)
-            return label, sequences
-            
+            return self._process_valid_zip(zip_path, metadata, syscall_dict)
         except Exception as e:
             print(f"Warning: Failed to process {zip_path}: {e}")
             return None, None
+
+    def _process_valid_zip(
+        self, zip_path: str, metadata: Dict, syscall_dict: Dict[str, int]
+    ) -> Tuple[int, List[List[int]]]:
+        """Process a validated ZIP file with metadata."""
+        label = 1 if metadata.get("exploit") else 0
+        attack_ts = self._get_attack_timestamp(metadata, label)
+        
+        parsed_syscalls = self._parse_syscalls(zip_path)
+        if not parsed_syscalls:
+            return label, []
+        
+        sequences = self._create_sequences(parsed_syscalls, label, attack_ts, syscall_dict)
+        return label, sequences
 
     def _extract_metadata(self, zip_path: str) -> Optional[Dict]:
         """Extract metadata from ZIP file."""
@@ -319,61 +310,49 @@ class LIDDatasetLoader:
     def _process_all_files(
         self, zip_files: List[str], syscall_dict: Dict[str, int]
     ) -> Tuple[List[List[int]], List[int]]:
-        """
-        Process all ZIP files in parallel.
-        
-        Uses multiprocessing to efficiently process large numbers of ZIP files.
-        Collects all sequences and labels from individual file processing results.
-        
-        Args:
-            zip_files: List of paths to ZIP files to process
-            syscall_dict: Dictionary mapping syscall names to IDs
-            
-        Returns:
-            Tuple of (all_sequences, all_labels) containing combined results
-        """
+        """Process all ZIP files in parallel."""
         print("Processing files...")
         start_time = time.time()
         
+        results = self._run_parallel_processing(zip_files, syscall_dict)
+        sequences, labels = self._collect_results(results)
+        
+        self._print_processing_stats(sequences, labels, start_time)
+        return sequences, labels
+
+    def _run_parallel_processing(self, zip_files: List[str], syscall_dict: Dict[str, int]) -> List:
+        """Run parallel processing of ZIP files."""
         with Pool(cpu_count()) as pool:
             args = [(zip_path, syscall_dict) for zip_path in zip_files]
-            results = pool.map(self._process_zip_file, args)
-        
-        attack_sequences = []
-        normal_sequences = []
+            return pool.map(self._process_zip_file, args)
+
+    def _collect_results(self, results: List) -> Tuple[List[List[int]], List[int]]:
+        """Collect and organize processing results."""
+        attack_sequences: List[List[int]] = []
+        normal_sequences: List[List[int]] = []
         
         for label, sequences_list in results:
             if label is not None and sequences_list:
-                if label == 1:
-                    attack_sequences.extend(sequences_list)
-                else:
-                    normal_sequences.extend(sequences_list)
-        
-        print(f"Found {len(attack_sequences)} attack, {len(normal_sequences)} normal sequences")
-        print(f"Processing completed in {time.time() - start_time:.1f} seconds")
+                target = attack_sequences if label == 1 else normal_sequences
+                target.extend(sequences_list)
         
         all_sequences = attack_sequences + normal_sequences
         all_labels = [1] * len(attack_sequences) + [0] * len(normal_sequences)
-        
         return all_sequences, all_labels
-    
+
+    def _print_processing_stats(self, sequences: List, labels: List, start_time: float) -> None:
+        """Print processing statistics."""
+        attack_count = sum(labels)
+        normal_count = len(labels) - attack_count
+        elapsed = time.time() - start_time
+        
+        print(f"Found {attack_count} attack, {normal_count} normal sequences")
+        print(f"Processing completed in {elapsed:.1f} seconds")
+
     def _split_data(
         self, sequences: List[List[int]], labels: List[int]
     ) -> Dict[str, Tuple[List[List[int]], List[int]]]:
-        """
-        Split data into train/val/test sets.
-        
-        Randomly shuffles the data and splits it according to predefined ratios.
-        Uses a fixed random seed for reproducible splits across runs.
-        
-        Args:
-            sequences: List of all syscall sequences
-            labels: List of corresponding labels (0 for normal, 1 for attack)
-            
-        Returns:
-            Dictionary with keys 'training', 'validation', 'test' and values
-            containing tuples of (sequences, labels) for each split
-        """
+        """Split data into train/val/test sets with fixed random seed."""
         data = list(zip(sequences, labels, strict=True))
         random.seed(42)
         random.shuffle(data)
@@ -382,19 +361,19 @@ class LIDDatasetLoader:
         train_end = int(total * self.TRAIN_RATIO)
         val_end = train_end + int(total * self.VAL_RATIO)
         
-        splits = {}
-        for name, split_data in [
-            ("training", data[:train_end]),
-            ("validation", data[train_end:val_end]),
-            ("test", data[val_end:])
-        ]:
-            if split_data:
-                seqs, lbls = zip(*split_data, strict=True)
-                splits[name] = (list(seqs), list(lbls))
-            else:
-                splits[name] = ([], [])
+        return {
+            "training": self._create_split(data[:train_end]),
+            "validation": self._create_split(data[train_end:val_end]),
+            "test": self._create_split(data[val_end:])
+        }
+
+    def _create_split(self, split_data: List) -> Tuple[List[List[int]], List[int]]:
+        """Create a data split from shuffled data."""
+        if not split_data:
+            return [], []
         
-        return splits
+        seqs, lbls = zip(*split_data, strict=True)
+        return list(seqs), list(lbls)
     
     def _print_statistics(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
         """
