@@ -17,6 +17,12 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
 
+SEQUENCE_LENGTH = 1024
+MIN_CHUNK_LENGTH = 50
+TRAIN_RATIO = 0.6
+VAL_RATIO = 0.2
+TEST_RATIO = 0.2
+RANDOM_SEED = 42
 
 def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: str = "") -> None:
     """
@@ -124,7 +130,7 @@ class LIDDatasetLoader:
                                         syscall = line.split()[5].decode() # syscall name at index 5
                                         all_syscalls.add(syscall)
                                     except (IndexError, UnicodeDecodeError):
-                                        pass
+                                        print(f"Malformed line in {zip_path}")
                             break
             except Exception as e:
                 print(f"Error processing zip file {zip_path}: {e}")
@@ -231,11 +237,12 @@ class LIDDatasetLoader:
         parsed = []
         for line in lines:
             try:
-                ts = int(str(line.split()[0].decode()).split(".")[0])
-                name = line.split()[5].decode()
+                parts = line.split()
+                ts = int(str(parts[0].decode()).split(".")[0])
+                name = parts[5].decode()
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
-                pass
+                print("Malformed syscall line, skipping")
         return parsed
     
     def _create_sequences(self, parsed: List[Tuple[int, str]], label: int, 
@@ -272,7 +279,7 @@ class LIDDatasetLoader:
         start_idx = next((i for i, (ts, _) in enumerate(parsed) if ts >= attack_ts), 0)
         names = [name for _, name in parsed[start_idx:]]
         seq = [syscall_dict[name] for name in names if name in syscall_dict]
-        return [seq[:1024]] if seq else []
+        return [seq[:SEQUENCE_LENGTH]] if seq else []
     
     def _create_normal_sequences(self, parsed: List[Tuple[int, str]], 
                                syscall_dict: Dict[str, int]) -> List[List[int]]:
@@ -287,9 +294,9 @@ class LIDDatasetLoader:
             List[List[int]]: List of normal sequences.
         """
         sequences = []
-        for i in range(0, len(parsed), 1024):
-            chunk = parsed[i:i + 1024]
-            if len(chunk) >= 50 or i == 0:
+        for i in range(0, len(parsed), SEQUENCE_LENGTH):
+            chunk = parsed[i:i + SEQUENCE_LENGTH]
+            if len(chunk) >= MIN_CHUNK_LENGTH or i == 0:
                 names = [name for _, name in chunk]
                 seq = [syscall_dict[name] for name in names if name in syscall_dict]
                 if seq:
@@ -342,12 +349,12 @@ class LIDDatasetLoader:
                 'validation', 'test' and values containing tuples of (sequences, labels).
         """
         data = list(zip(sequences, labels, strict=True))
-        random.seed(42)
+        random.seed(RANDOM_SEED)
         random.shuffle(data)
         
         total = len(data)
-        train_end = int(total * 0.6)
-        val_end = train_end + int(total * 0.2)
+        train_end = int(total * TRAIN_RATIO)
+        val_end = train_end + int(total * VAL_RATIO)
         
         splits = {
             "training": data[:train_end],
