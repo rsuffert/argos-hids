@@ -121,13 +121,13 @@ class LIDDatasetLoader:
                             with zf.open(fname) as sf:
                                 for line in sf.readlines():
                                     try:
-                                        syscall = line.split()[5].decode()
+                                        syscall = line.split()[5].decode() # syscall name at index 5
                                         all_syscalls.add(syscall)
                                     except (IndexError, UnicodeDecodeError):
                                         pass
                             break
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error processing zip file {zip_path}: {e}")
         
         syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
         
@@ -165,6 +165,7 @@ class LIDDatasetLoader:
             return label, sequences
             
         except Exception:
+            print(f"Failed to process {zip_path}")
             return None, []
     
     def _extract_zip_data(self, zip_path: str) -> Tuple[Optional[Dict], List]:
