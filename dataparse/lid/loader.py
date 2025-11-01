@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import sys
 import csv
-import logging
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
