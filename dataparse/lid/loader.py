@@ -13,6 +13,7 @@ from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import sys
+import csv
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
@@ -23,6 +24,8 @@ TRAIN_RATIO = 0.6
 VAL_RATIO = 0.2
 TEST_RATIO = 0.2
 RANDOM_SEED = 42
+
+SYSCALL_MAPPING_DUMP_PATH = "mapping.csv"
 
 def save_sequences_to_h5(sequences: List[List[int]], filepath: str) -> None:
     """
@@ -72,9 +75,10 @@ class LIDDatasetLoader:
         Orchestrates the complete processing pipeline:
         1. Discovers ZIP files in the data directory
         2. Builds or loads syscall dictionary
-        3. Processes all files in parallel
-        4. Splits data into train/validation/test sets
-        5. Saves results to HDF5 files
+        3. Dumps a CSV mapping of syscall names to IDs
+        4. Processes all files in parallel
+        5. Splits data into train/validation/test sets
+        6. Saves results to HDF5 files
         """
         print("Starting LID-DS Loader")
         
@@ -113,7 +117,8 @@ class LIDDatasetLoader:
         """
         if os.path.exists(self.syscall_dict_path):
             with open(self.syscall_dict_path, "rb") as f:
-                return pickle.load(f)
+                syscall_dict = pickle.load(f)
+            print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
         
         print("Building syscall dictionary...")
         all_syscalls = set()
@@ -141,6 +146,14 @@ class LIDDatasetLoader:
             pickle.dump(syscall_dict, f)
         
         print(f"Created dictionary with {len(syscall_dict)} syscalls")
+
+        csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            for name, id_ in syscall_dict.items():
+                writer.writerow([name, id_])
+        print(f"Dumped syscall mapping to {csv_path}")
+
         return syscall_dict
     
     def _process_single_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], List[List[int]]]:
