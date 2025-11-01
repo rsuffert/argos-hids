@@ -14,6 +14,10 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import sys
 import csv
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
@@ -38,7 +42,7 @@ def save_sequences_to_h5(sequences: List[List[int]], filepath: str) -> None:
     if not sequences:
         return
     
-    print(f"Saving {len(sequences)} sequences to {filepath}")
+    logger.info(f"Saving {len(sequences)} sequences to {filepath}")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
     if os.path.exists(filepath):
@@ -80,27 +84,27 @@ class LIDDatasetLoader:
         5. Splits data into train/validation/test sets
         6. Saves results to HDF5 files
         """
-        print("Starting LID-DS Loader")
+        logger.info("Starting LID-DS Loader")
         
         if not self.data_dir:
-            print("No data directory specified")
+            logger.info("No data directory specified")
             return
         
         zip_files = [str(p) for p in Path(self.data_dir).rglob("*.zip") 
                     if "__MACOSX" not in str(p)]
         
         if not zip_files:
-            print("No ZIP files found")
+            logger.info("No ZIP files found")
             return
         
-        print(f"Found {len(zip_files)} ZIP files")
+        logger.info(f"Found {len(zip_files)} ZIP files")
         
         syscall_dict = self._get_syscall_dict(zip_files)
         sequences, labels = self._process_files(zip_files, syscall_dict)
         splits = self._split_data(sequences, labels)
         self._save_splits(splits)
         
-        print("Processing completed")
+        logger.info("Processing completed")
     
     def _get_syscall_dict(self, zip_files: List[str]) -> Dict[str, int]:
         """
@@ -118,9 +122,9 @@ class LIDDatasetLoader:
         if os.path.exists(self.syscall_dict_path):
             with open(self.syscall_dict_path, "rb") as f:
                 syscall_dict = pickle.load(f)
-            print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
+            logger.info(f"Loaded existing dictionary with {len(syscall_dict)} entries")
         else:
-            print("Building syscall dictionary...")
+            logger.info("Building syscall dictionary...")
             all_syscalls = set()
             
             for zip_path in zip_files:
@@ -145,7 +149,7 @@ class LIDDatasetLoader:
             with open(self.syscall_dict_path, "wb") as f:
                 pickle.dump(syscall_dict, f)
             
-            print(f"Created dictionary with {len(syscall_dict)} syscalls")
+            logger.info(f"Created dictionary with {len(syscall_dict)} syscalls")
         
         # Always dump CSV mapping
         csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
@@ -153,7 +157,7 @@ class LIDDatasetLoader:
             writer = csv.writer(f)
             for name, id_ in syscall_dict.items():
                 writer.writerow([name, id_])
-        print(f"Dumped syscall mapping to {csv_path}")
+        logger.info(f"Dumped syscall mapping to {csv_path}")
 
         return syscall_dict
     
@@ -255,7 +259,7 @@ class LIDDatasetLoader:
                 name = parts[5].decode()
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
-                print("Malformed syscall line, skipping")
+                logger.info("Malformed syscall line, skipping")
         return parsed
     
     def _create_sequences(self, parsed: List[Tuple[int, str]], label: int, 
@@ -327,7 +331,7 @@ class LIDDatasetLoader:
         Returns:
             Tuple[List[List[int]], List[int]]: Tuple of (all_sequences, all_labels).
         """
-        print("Processing files...")
+        logger.info("Processing files...")
         
         with Pool(cpu_count()) as pool:
             args = [(f, syscall_dict) for f in zip_files]
@@ -343,7 +347,7 @@ class LIDDatasetLoader:
         
         attack_count = sum(all_labels)
         normal_count = len(all_labels) - attack_count
-        print(f"Found {attack_count} attack, {normal_count} normal sequences")
+        logger.info(f"Found {attack_count} attack, {normal_count} normal sequences")
         
         return all_sequences, all_labels
     
@@ -393,12 +397,12 @@ class LIDDatasetLoader:
 
             if attack_seqs:
                 path = os.path.join(self.data_dir, f"1_{split_name}.h5")
-                print(f"Saving {len(attack_seqs)} attack {split_name} sequences to {path}")
+                logger.info(f"Saving {len(attack_seqs)} attack {split_name} sequences to {path}")
                 save_sequences_to_h5(attack_seqs, path)
 
             if normal_seqs:
                 path = os.path.join(self.data_dir, f"0_{split_name}.h5")
-                print(f"Saving {len(normal_seqs)} normal {split_name} sequences to {path}")
+                logger.info(f"Saving {len(normal_seqs)} normal {split_name} sequences to {path}")
                 save_sequences_to_h5(normal_seqs, path)
 
 
