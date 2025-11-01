@@ -16,9 +16,6 @@ import sys
 import csv
 import logging
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger(__name__)
-
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
 
@@ -30,6 +27,9 @@ TEST_RATIO = 0.2
 RANDOM_SEED = 42
 
 SYSCALL_MAPPING_DUMP_PATH = "mapping.csv"
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 def save_sequences_to_h5(sequences: List[List[int]], filepath: str) -> None:
     """
