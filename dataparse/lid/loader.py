@@ -272,9 +272,9 @@ class LIDDatasetLoader:
         Returns:
             List[List[int]]: List of syscall ID sequences.
         """
-        if label and attack_ts:
-            return self._create_attack_sequences(parsed, attack_ts, syscall_dict)
-        return self._create_normal_sequences(parsed, syscall_dict)
+        return (self._create_attack_sequences(parsed, attack_ts, syscall_dict) 
+                if label and attack_ts 
+                else self._create_normal_sequences(parsed, syscall_dict))
     
     def _create_attack_sequences(self, parsed: List[Tuple[int, str]], 
                                attack_ts: int, syscall_dict: Dict[str, int]) -> List[List[int]]:
