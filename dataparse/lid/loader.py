@@ -372,24 +372,20 @@ class LIDDatasetLoader:
         return result
     
     def _save_splits(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
-        """
-        Save data splits to HDF5 files.
-        
-        Args:
-            splits (Dict[str, Tuple[List[List[int]], List[int]]]): Dictionary containing 
-                train/validation/test splits with sequences and labels.
-        """
+        """Save data splits to HDF5 files."""
         for split_name, (seqs, lbls) in splits.items():
             attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
             normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
-            
+
             if attack_seqs:
                 path = os.path.join(self.data_dir, f"1_{split_name}.h5")
-                save_sequences_to_h5(attack_seqs, path, f"attack {split_name}")
-            
+                print(f"Saving {len(attack_seqs)} attack {split_name} sequences to {path}")
+                save_sequences_to_h5(attack_seqs, path)
+
             if normal_seqs:
                 path = os.path.join(self.data_dir, f"0_{split_name}.h5")
-                save_sequences_to_h5(normal_seqs, path, f"normal {split_name}")
+                print(f"Saving {len(normal_seqs)} normal {split_name} sequences to {path}")
+                save_sequences_to_h5(normal_seqs, path)
 
 
 def main() -> None:
