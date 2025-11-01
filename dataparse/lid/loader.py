@@ -19,9 +19,6 @@ import logging
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from dongting.loader import append_seq_to_h5
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger(__name__)
-
 SEQUENCE_LENGTH = 1024
 MIN_CHUNK_LENGTH = 50
 TRAIN_RATIO = 0.6
@@ -42,7 +39,7 @@ def save_sequences_to_h5(sequences: List[List[int]], filepath: str) -> None:
     if not sequences:
         return
     
-    logger.info("Saving %d sequences to %s", len(sequences), filepath)
+    print(f"Saving {len(sequences)} sequences to {filepath}")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
     if os.path.exists(filepath):
@@ -84,27 +81,27 @@ class LIDDatasetLoader:
         5. Splits data into train/validation/test sets
         6. Saves results to HDF5 files
         """
-        logger.info("Starting LID-DS Loader")
+        print("Starting LID-DS Loader")
         
         if not self.data_dir:
-            logger.error("No data directory specified")
+            print("No data directory specified")
             return
         
         zip_files = [str(p) for p in Path(self.data_dir).rglob("*.zip") 
                     if "__MACOSX" not in str(p)]
         
         if not zip_files:
-            logger.warning("No ZIP files found")
+            print("No ZIP files found")
             return
         
-        logger.info("Found %d ZIP files", len(zip_files))
+        print(f"Found {len(zip_files)} ZIP files")
         
         syscall_dict = self._get_syscall_dict(zip_files)
         sequences, labels = self._process_files(zip_files, syscall_dict)
         splits = self._split_data(sequences, labels)
         self._save_splits(splits)
         
-        logger.info("Processing completed")
+        print("Processing completed")
     
     def _get_syscall_dict(self, zip_files: List[str]) -> Dict[str, int]:
         """
@@ -122,9 +119,9 @@ class LIDDatasetLoader:
         if os.path.exists(self.syscall_dict_path):
             with open(self.syscall_dict_path, "rb") as f:
                 syscall_dict = pickle.load(f)
-            logger.info("Loaded existing dictionary with %d entries", len(syscall_dict))
+            print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
         else:
-            logger.info("Building syscall dictionary...")
+            print("Building syscall dictionary...")
             all_syscalls = set()
             
             for zip_path in zip_files:
@@ -135,13 +132,13 @@ class LIDDatasetLoader:
                                 with zf.open(fname) as sf:
                                     for line in sf.readlines():
                                         try:
-                                            syscall = line.split()[5].decode()
+                                            syscall = line.split()[5].decode() # syscall name at index 5 of .sc file
                                             all_syscalls.add(syscall)
                                         except (IndexError, UnicodeDecodeError):
-                                            pass
+                                            pass  # skip malformed lines
                                 break
                 except Exception:
-                    pass
+                    pass # check zip files integrity later
             
             syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
             
@@ -149,7 +146,7 @@ class LIDDatasetLoader:
             with open(self.syscall_dict_path, "wb") as f:
                 pickle.dump(syscall_dict, f)
             
-            logger.info("Created dictionary with %d syscalls", len(syscall_dict))
+            print(f"Created dictionary with {len(syscall_dict)} syscalls")
         
         # Always dump CSV mapping
         csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
@@ -157,39 +154,9 @@ class LIDDatasetLoader:
             writer = csv.writer(f)
             for name, id_ in syscall_dict.items():
                 writer.writerow([name, id_])
-        logger.info("Dumped syscall mapping to %s", csv_path)
+        print(f"Dumped syscall mapping to {csv_path}")
 
         return syscall_dict
-    
-    def _extract_zip_data(self, zip_path: str) -> Tuple[Optional[Dict], List]:
-        """
-        Extract metadata and syscall lines from ZIP file.
-        
-        Args:
-            zip_path (str): Path to the ZIP file.
-            
-        Returns:
-            Tuple[Optional[Dict], List]: Tuple of (metadata_dict, syscall_lines). 
-                Returns (None, []) if extraction fails.
-        """
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            # Get metadata
-            json_files = [f for f in zf.namelist() if f.endswith(".json")]
-            if not json_files:
-                return None, []
-            
-            with zf.open(json_files[0]) as mf:
-                metadata = json.load(mf)
-            
-            # Get syscalls
-            sc_files = [f for f in zf.namelist() if f.endswith(".sc")]
-            if not sc_files:
-                return None, []
-            
-            with zf.open(sc_files[0]) as sf:
-                lines = sf.readlines()
-        
-        return metadata, lines
     
     def _process_single_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], List[List[int]]]:
         """
@@ -220,6 +187,36 @@ class LIDDatasetLoader:
         except Exception:
             # check if file is missing/corrupted
             return None, []
+    
+    def _extract_zip_data(self, zip_path: str) -> Tuple[Optional[Dict], List]:
+        """
+        Extract metadata and syscall lines from ZIP file.
+        
+        Args:
+            zip_path (str): Path to the ZIP file.
+            
+        Returns:
+            Tuple[Optional[Dict], List]: Tuple of (metadata_dict, syscall_lines). 
+                Returns (None, []) if extraction fails.
+        """
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # Get metadata
+            json_files = [f for f in zf.namelist() if f.endswith(".json")]
+            if not json_files:
+                return None, []
+            
+            with zf.open(json_files[0]) as mf:
+                metadata = json.load(mf)
+            
+            # Get syscalls
+            sc_files = [f for f in zf.namelist() if f.endswith(".sc")]
+            if not sc_files:
+                return None, []
+            
+            with zf.open(sc_files[0]) as sf:
+                lines = sf.readlines()
+        
+        return metadata, lines
     
     def _get_attack_timestamp(self, metadata: Dict, label: int) -> Optional[int]:
         """
@@ -259,7 +256,7 @@ class LIDDatasetLoader:
                 name = parts[5].decode()
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
-                logger.warning("Malformed syscall line, skipping")
+                print("Malformed syscall line, skipping")
         return parsed
     
     def _create_sequences(self, parsed: List[Tuple[int, str]], label: int, 
@@ -331,7 +328,7 @@ class LIDDatasetLoader:
         Returns:
             Tuple[List[List[int]], List[int]]: Tuple of (all_sequences, all_labels).
         """
-        logger.info("Processing files...")
+        print("Processing files...")
         
         with Pool(cpu_count()) as pool:
             args = [(f, syscall_dict) for f in zip_files]
@@ -347,7 +344,7 @@ class LIDDatasetLoader:
         
         attack_count = sum(all_labels)
         normal_count = len(all_labels) - attack_count
-        logger.info("Found %d attack, %d normal sequences", attack_count, normal_count)
+        print(f"Found {attack_count} attack, {normal_count} normal sequences")
         
         return all_sequences, all_labels
     
@@ -390,25 +387,19 @@ class LIDDatasetLoader:
         return result
     
     def _save_splits(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
-        """
-        Save data splits to HDF5 files.
-        
-        Args:
-            splits (Dict[str, Tuple[List[List[int]], List[int]]]): Dictionary containing 
-                train/validation/test splits with sequences and labels.
-        """
+        """Save data splits to HDF5 files."""
         for split_name, (seqs, lbls) in splits.items():
-            attack_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 1]
-            normal_seqs = [s for s, l in zip(seqs, lbls, strict=True) if l == 0]
+            attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
+            normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
 
             if attack_seqs:
                 path = os.path.join(self.data_dir, f"1_{split_name}.h5")
-                logger.info("Saving %d attack %s sequences to %s", len(attack_seqs), split_name, path)
+                print(f"Saving {len(attack_seqs)} attack {split_name} sequences to {path}")
                 save_sequences_to_h5(attack_seqs, path)
 
             if normal_seqs:
                 path = os.path.join(self.data_dir, f"0_{split_name}.h5")
-                logger.info("Saving %d normal %s sequences to %s", len(normal_seqs), split_name, path)
+                print(f"Saving {len(normal_seqs)} normal {split_name} sequences to {path}")
                 save_sequences_to_h5(normal_seqs, path)
 
 
