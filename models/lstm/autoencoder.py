@@ -87,14 +87,7 @@ class LSTMAutoencoder(pl.LightningModule):
             batch_first=True
         )
 
-        # Decoder: takes encoder's hidden states
-        self.decoder = torch.nn.LSTM(
-            input_size=config.hidden_size,
-            hidden_size=config.hidden_size,
-            num_layers=config.num_layers,
-            batch_first=True
-        )
-
+        self.pos_embedding = torch.nn.Embedding(MAX_SEQ_LEN, self.hidden_size)
         self.output_layer = torch.nn.Linear(config.hidden_size, config.input_size)
         self.criterion = torch.nn.MSELoss() # to measure how well the autoencoder reconstructs the input
 
@@ -103,15 +96,18 @@ class LSTMAutoencoder(pl.LightningModule):
         packed_input = pack_padded_sequence(
             x, lengths.cpu(), batch_first=True, enforce_sorted=False
         )
-        _, (h_n, c_n) = self.encoder(packed_input)
+        _, (h_n, _) = self.encoder(packed_input)
 
         batch_size, seq_len = x.size(0), x.size(1)
-        decoder_input = torch.zeros(
-            batch_size, seq_len, self.hidden_size, device=x.device
-        )
-        decoded, _ = self.decoder(decoder_input, (h_n, c_n))
+        h_repeated = h_n[-1].unsqueeze(-1).repeat(1, seq_len, 1)
 
-        return self.output_layer(decoded)
+        positions = (torch.arange(seq_len, device=x.device)
+                          .unsqueeze(0)
+                          .expand(batch_size, -1))
+        pos_emb = self.pos_embedding(positions)
+        h_with_pos = h_repeated + pos_emb
+
+        return self.output_layer(h_with_pos)
 
 
     def shared_step(self, batch: Tuple[Tensor, Tensor]) -> Tensor:
