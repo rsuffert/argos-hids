@@ -131,7 +131,7 @@ class LIDDatasetLoader:
                                 with zf.open(fname) as sf:
                                     for line in sf.readlines():
                                         try:
-                                            syscall = line.split()[5].decode()
+                                            syscall = line.split()[5].decode() # syscall name at index 5 of .sc file
                                             all_syscalls.add(syscall)
                                         except (IndexError, UnicodeDecodeError):
                                             pass  # skip malformed lines
