@@ -137,7 +137,7 @@ class LIDDatasetLoader:
                                             pass  # skip malformed lines
                                 break
                 except Exception:
-                    print("Check zip file integrity, skipping bad file")
+                    pass # check zip files integrity later
             
             syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
             
@@ -184,7 +184,7 @@ class LIDDatasetLoader:
             return label, sequences
             
         except Exception:
-            print(f"Failed to process {zip_path}")
+            # check if file is missing/corrupted
             return None, []
     
     def _extract_zip_data(self, zip_path: str) -> Tuple[Optional[Dict], List]:
