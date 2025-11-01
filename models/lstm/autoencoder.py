@@ -307,7 +307,10 @@ def compute_threshold(
                 seq_len = int(lengths[i].item())
                 seq = sequences[i, :seq_len]
                 errors.append(model.reconstruction_error(seq))
-    return float(np.percentile(errors, percentile))
+    errors_array = np.array(errors)
+    mean_error = np.mean(errors_array)
+    std_error = np.std(errors_array)
+    return mean_error + 2 * std_error
 
 def main() -> None:
     """Main function to train the LSTM autoencoder."""
@@ -365,9 +368,9 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
-    model.set_threshold(compute_threshold(
-        model, valid_loader, THRESHOLD_PERCENTILE
-    ))
+    threshold = compute_threshold(model, valid_loader, THRESHOLD_PERCENTILE)
+    print(f"Setting threshold to {threshold}")
+    model.set_threshold(threshold)
     torch.jit.script(model).save("lstm-autoencoder.pt")
 
 if __name__ == "__main__":
