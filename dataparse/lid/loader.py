@@ -137,7 +137,7 @@ class LIDDatasetLoader:
                                         print(f"Malformed line in {zip_path}")
                             break
             except Exception as e:
-                print(f"Error processing zip file {zip_path}: {e}")
+                print(f"Error processing zip file {zip_path}: {e}") # check zip integrity
         
         syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
         
@@ -146,12 +146,13 @@ class LIDDatasetLoader:
             pickle.dump(syscall_dict, f)
         
         print(f"Created dictionary with {len(syscall_dict)} syscalls")
-
+        # dump the csv from dictionary
         csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             for name, id_ in syscall_dict.items():
                 writer.writerow([name, id_])
+
         print(f"Dumped syscall mapping to {csv_path}")
 
         return syscall_dict
