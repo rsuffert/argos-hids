@@ -29,7 +29,7 @@ MAX_EPOCHS = 40             # Number of training epochs
 MAX_SEQ_LEN = 2048          # Maximum sequence length for padding/truncation
 EARLY_STOP_PATIENCE = 5     # Patience for early stopping training
 EARLY_STOP_MIN_DELTA = 50   # Minimum change to qualify as an improvement
-THRESHOLD_PERCENTILE = 95.0 # Percentile of reconstruction errors to use as anomaly detection threshold
+THRESHOLD_PERCENTILE = 80.0 # Percentile of reconstruction errors to use as anomaly detection threshold
 
 # ==========================
 # Dataset (H5 files) paths
@@ -308,9 +308,8 @@ def compute_threshold(
                 seq = sequences[i, :seq_len]
                 errors.append(model.reconstruction_error(seq))
     errors_array = np.array(errors)
-    mean_error = np.mean(errors_array)
-    std_error = np.std(errors_array)
-    return mean_error + 2 * std_error
+    threshold = np.percentile(errors_array, percentile)
+    return float(threshold)
 
 def main() -> None:
     """Main function to train the LSTM autoencoder."""
