@@ -119,40 +119,40 @@ class LIDDatasetLoader:
             with open(self.syscall_dict_path, "rb") as f:
                 syscall_dict = pickle.load(f)
             print(f"Loaded existing dictionary with {len(syscall_dict)} entries")
+        else:
+            print("Building syscall dictionary...")
+            all_syscalls = set()
+            
+            for zip_path in zip_files:
+                try:
+                    with zipfile.ZipFile(zip_path, "r") as zf:
+                        for fname in zf.namelist():
+                            if fname.endswith(".sc"):
+                                with zf.open(fname) as sf:
+                                    for line in sf.readlines():
+                                        try:
+                                            syscall = line.split()[5].decode()
+                                            all_syscalls.add(syscall)
+                                        except (IndexError, UnicodeDecodeError):
+                                            pass  # skip malformed lines
+                                break
+                except Exception:
+                    print("Check zip file integrity, skipping bad file")
+            
+            syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
+            
+            os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
+            with open(self.syscall_dict_path, "wb") as f:
+                pickle.dump(syscall_dict, f)
+            
+            print(f"Created dictionary with {len(syscall_dict)} syscalls")
         
-        print("Building syscall dictionary...")
-        all_syscalls = set()
-        
-        for zip_path in zip_files:
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    for fname in zf.namelist():
-                        if fname.endswith(".sc"):
-                            with zf.open(fname) as sf:
-                                for line in sf.readlines():
-                                    try:
-                                        syscall = line.split()[5].decode() # syscall name at index 5
-                                        all_syscalls.add(syscall)
-                                    except (IndexError, UnicodeDecodeError):
-                                        print(f"Malformed line in {zip_path}")
-                            break
-            except Exception as e:
-                print(f"Error processing zip file {zip_path}: {e}") # check zip integrity
-        
-        syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
-        
-        os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
-        with open(self.syscall_dict_path, "wb") as f:
-            pickle.dump(syscall_dict, f)
-        
-        print(f"Created dictionary with {len(syscall_dict)} syscalls")
-        # dump the csv from dictionary
+        # Always dump CSV mapping
         csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             for name, id_ in syscall_dict.items():
                 writer.writerow([name, id_])
-
         print(f"Dumped syscall mapping to {csv_path}")
 
         return syscall_dict
