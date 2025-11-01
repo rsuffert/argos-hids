@@ -24,19 +24,18 @@ VAL_RATIO = 0.2
 TEST_RATIO = 0.2
 RANDOM_SEED = 42
 
-def save_sequences_to_h5(sequences: List[List[int]], filepath: str, label_name: str = "") -> None:
+def save_sequences_to_h5(sequences: List[List[int]], filepath: str) -> None:
     """
     Save multiple sequences to an HDF5 file using DongTing's format.
 
     Args:
         sequences (List[List[int]]): List of syscall sequences to save.
         filepath (str): Path where the H5 file will be saved.
-        label_name (str, optional): Descriptive name for logging purposes. Defaults to "".
     """
     if not sequences:
         return
     
-    print(f"Saving {len(sequences)} {label_name} sequences")
+    print(f"Saving {len(sequences)} sequences to {filepath}")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
     if os.path.exists(filepath):
