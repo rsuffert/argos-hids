@@ -12,6 +12,8 @@ poetry install
 From the dataparse/lid directory run the loader with poetry:
 ```bash
 cd dataparse/lid
+export LID_DATA_DIR="$(pwd)/lid-data"
+export PYTHONPATH="$(pwd)/../.."
 poetry run python3 loader.py
 ```
 
