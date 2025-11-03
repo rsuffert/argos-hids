@@ -157,15 +157,15 @@ class LIDDatasetLoader:
                 if not sc_files:
                     return syscalls
                 
-                with zf.open(sc_files[0]) as scf:
+                with zf.open(sc_files[0]) as scf: # assuming there's only one .sc file in the zip
                     for line in scf.readlines():
                         try:
                             syscall = line.split()[5].decode() # syscall name is at the 6 position
                             syscalls.add(syscall)
                         except (IndexError, UnicodeDecodeError):
-                            pass
+                            logging.warning("Failed to parse line in %s", zip_path)
         except Exception:
-            pass
+            logging.warning("Failed to extract syscalls from %s", zip_path)
         return syscalls
     
     def _process_single_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], List[List[int]]]:
@@ -269,7 +269,7 @@ class LIDDatasetLoader:
                 name = parts[5].decode() # syscall name is at the 6 position
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
-                pass
+                logging.warning("Failed to parse line in syscall data: %s", line)
         return parsed
     
     def _create_attack_sequences(self, parsed: List[Tuple[int, str]], 
