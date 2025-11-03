@@ -1,6 +1,6 @@
 # LID-DS Loader
 
-A pipeline for converting LID-DS syscall scenario ZIP files into ML-ready HDF5 files compatible with ARGOS.
+A pipeline for converting LID-DS syscall scenario ZIP files into ML-ready HDF5 files compatible with ARGOS. All raw scenarios from the LID-DS dataset (which should be fed to this pipeline) are available [here](https://drive.proton.me/urls/BWKRGQK994#fCK9JKL93Sjm).
 
 ## Requirements
 Install project dependencies:
