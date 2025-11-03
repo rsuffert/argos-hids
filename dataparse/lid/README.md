@@ -23,6 +23,6 @@ Generated files in `LID_DATA_DIR`:
 - `0_training.h5`, `1_training.h5`  
 - `0_validation.h5`, `1_validation.h5`  
 - `0_test.h5`, `1_test.h5`
-- ``mapping.csv` — syscall name to ID mapping used
+- `mapping.csv` — syscall name to ID mapping used
 
 HDF5 format matches DongTing loader for interoperability across ARGOS.
