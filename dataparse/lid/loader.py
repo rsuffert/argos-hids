@@ -109,7 +109,6 @@ class LIDDatasetLoader:
                 writer.writerow([name, id_])
         logger.info(f"Dumped syscall mapping to {csv_path}")
         
-        syscall_dict = self._get_syscall_dict(zip_files)
         sequences, labels = self._process_files(zip_files, syscall_dict)
         splits = self._split_data(sequences, labels)
         self._save_splits(splits)
@@ -137,28 +136,37 @@ class LIDDatasetLoader:
         
         logger.info("Building syscall dictionary...")
         all_syscalls = set()
+        
         for zip_path in zip_files:
-            try:
-                with zipfile.ZipFile(zip_path, "r") as zf:
-                    sc_files = [fname for fname in zf.namelist() if fname.endswith(".sc")]
-                    if not sc_files:
-                        continue
-                    with zf.open(sc_files[0]) as scf: # assuming there will only be one .sc file
-                        for line in scf.readlines():
-                            try:
-                                syscall = line.split()[5].decode() # syscall name at index 5 of .sc file
-                                all_syscalls.add(syscall)
-                            except (IndexError, UnicodeDecodeError):
-                                logger.warning(f"Skipping malformed line in file {zip_path}: {line.decode()}")
-            except Exception:
-                logger.warning(f"Malformed ZIP file skipped: {zip_path}")
-            
+            syscalls = self._extract_syscalls_from_zip(zip_path)
+            all_syscalls.update(syscalls)
+        
         syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
         os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
         with open(self.syscall_dict_path, "wb") as f:
             pickle.dump(syscall_dict, f)
         logger.info(f"Created dictionary with {len(syscall_dict)} syscalls")
         return syscall_dict
+    
+    def _extract_syscalls_from_zip(self, zip_path: str) -> set:
+        """Extract syscalls from a single ZIP file."""
+        syscalls = set()
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                sc_files = [fname for fname in zf.namelist() if fname.endswith(".sc")]
+                if not sc_files:
+                    return syscalls
+                
+                with zf.open(sc_files[0]) as scf:
+                    for line in scf.readlines():
+                        try:
+                            syscall = line.split()[5].decode()
+                            syscalls.add(syscall)
+                        except (IndexError, UnicodeDecodeError):
+                            pass
+        except Exception:
+            pass
+        return syscalls
     
     def _process_single_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], List[List[int]]]:
         """
@@ -258,7 +266,7 @@ class LIDDatasetLoader:
                 name = parts[5].decode()
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
-                logger.info("Malformed syscall line, skipping")
+                pass
         return parsed
     
     def _create_sequences(self, parsed: List[Tuple[int, str]], label: int, 
