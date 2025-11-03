@@ -158,7 +158,7 @@ class LIDDatasetLoader:
                 with zf.open(sc_files[0]) as scf:
                     for line in scf.readlines():
                         try:
-                            syscall = line.split()[5].decode()
+                            syscall = line.split()[5].decode() # syscall name is at the 6 position
                             syscalls.add(syscall)
                         except (IndexError, UnicodeDecodeError):
                             pass
@@ -185,7 +185,7 @@ class LIDDatasetLoader:
             if metadata is None:
                 return None, []
             
-            label = 1 if metadata.get("exploit") else 0
+            label = 1 if metadata.get("exploit") else 0 # 1 for attack, 0 for normal
             attack_ts = self._get_attack_timestamp(metadata, label)
             parsed = self._parse_syscall_lines(lines)
             sequences = self._create_sequences(parsed, label, attack_ts, syscall_dict)
@@ -244,7 +244,7 @@ class LIDDatasetLoader:
         if not exploit_info or "absolute" not in exploit_info[0]:
             return None
         
-        return int(str(exploit_info[0]["absolute"]).split(".")[0])
+        return int(str(exploit_info[0]["absolute"]).split(".")[0]) # timestamp we want to check
     
     def _parse_syscall_lines(self, lines: List) -> List[Tuple[int, str]]:
         """
@@ -260,8 +260,8 @@ class LIDDatasetLoader:
         for line in lines:
             try:
                 parts = line.split()
-                ts = int(str(parts[0].decode()).split(".")[0])
-                name = parts[5].decode()
+                ts = int(str(parts[0].decode()).split(".")[0]) 
+                name = parts[5].decode() # syscall name is at the 6 position
                 parsed.append((ts, name))
             except (IndexError, UnicodeDecodeError):
                 pass
