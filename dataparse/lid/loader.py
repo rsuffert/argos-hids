@@ -98,6 +98,16 @@ class LIDDatasetLoader:
             return
         
         logger.info(f"Found {len(zip_files)} ZIP files")
+
+        syscall_dict = self._get_syscall_dict(zip_files)
+        
+        # dump syscall mapping to csv
+        csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            for name, id_ in syscall_dict.items():
+                writer.writerow([name, id_])
+        logger.info(f"Dumped syscall mapping to {csv_path}")
         
         syscall_dict = self._get_syscall_dict(zip_files)
         sequences, labels = self._process_files(zip_files, syscall_dict)
@@ -123,42 +133,31 @@ class LIDDatasetLoader:
             with open(self.syscall_dict_path, "rb") as f:
                 syscall_dict = pickle.load(f)
             logger.info(f"Loaded existing dictionary with {len(syscall_dict)} entries")
-        else:
-            logger.info("Building syscall dictionary...")
-            all_syscalls = set()
-            
-            for zip_path in zip_files:
-                try:
-                    with zipfile.ZipFile(zip_path, "r") as zf:
-                        for fname in zf.namelist():
-                            if fname.endswith(".sc"):
-                                with zf.open(fname) as sf:
-                                    for line in sf.readlines():
-                                        try:
-                                            syscall = line.split()[5].decode() # syscall name at index 5 of .sc file
-                                            all_syscalls.add(syscall)
-                                        except (IndexError, UnicodeDecodeError):
-                                            pass  # skip malformed lines
-                                break
-                except Exception:
-                    pass # check zip files integrity later
-            
-            syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
-            
-            os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
-            with open(self.syscall_dict_path, "wb") as f:
-                pickle.dump(syscall_dict, f)
-            
-            logger.info(f"Created dictionary with {len(syscall_dict)} syscalls")
+            return syscall_dict
         
-        # Always dump CSV mapping
-        csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            for name, id_ in syscall_dict.items():
-                writer.writerow([name, id_])
-        logger.info(f"Dumped syscall mapping to {csv_path}")
-
+        logger.info("Building syscall dictionary...")
+        all_syscalls = set()
+        for zip_path in zip_files:
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    sc_files = [fname for fname in zf.namelist() if fname.endswith(".sc")]
+                    if not sc_files:
+                        continue
+                    with zf.open(sc_files[0]) as scf: # assuming there will only be one .sc file
+                        for line in scf.readlines():
+                            try:
+                                syscall = line.split()[5].decode() # syscall name at index 5 of .sc file
+                                all_syscalls.add(syscall)
+                            except (IndexError, UnicodeDecodeError):
+                                logger.warning(f"Skipping malformed line in file {zip_path}: {line.decode()}")
+            except Exception:
+                logger.warning(f"Malformed ZIP file skipped: {zip_path}")
+            
+        syscall_dict = {name: i for i, name in enumerate(sorted(all_syscalls))}
+        os.makedirs(os.path.dirname(self.syscall_dict_path), exist_ok=True)
+        with open(self.syscall_dict_path, "wb") as f:
+            pickle.dump(syscall_dict, f)
+        logger.info(f"Created dictionary with {len(syscall_dict)} syscalls")
         return syscall_dict
     
     def _process_single_file(self, args: Tuple[str, Dict[str, int]]) -> Tuple[Optional[int], List[List[int]]]:
@@ -390,7 +389,13 @@ class LIDDatasetLoader:
         return result
     
     def _save_splits(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
-        """Save data splits to HDF5 files."""
+        """
+        Save data splits to HDF5 files.
+        
+        Args:
+            splits (Dict[str, Tuple[List[List[int]], List[int]]]): Dictionary containing 
+                train/validation/test splits with sequences and labels.
+        """
         for split_name, (seqs, lbls) in splits.items():
             attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
             normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
