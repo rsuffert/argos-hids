@@ -109,7 +109,9 @@ class LIDDatasetLoader:
         
         sequences, labels = self._process_files(zip_files, syscall_dict)
         splits = self._split_data(sequences, labels)
-        self._save_splits(splits)
+        for split_name, (seqs, lbls) in splits.items():
+            self._save_split(seqs, lbls, split_name, label=1)
+            self._save_split(seqs, lbls, split_name, label=0)
         
         logger.info("Processing completed")
     
@@ -188,7 +190,9 @@ class LIDDatasetLoader:
             label = 1 if metadata.get("exploit") else 0 # 1 for attack, 0 for normal
             attack_ts = self._get_attack_timestamp(metadata, label)
             parsed = self._parse_syscall_lines(lines)
-            sequences = self._create_sequences(parsed, label, attack_ts, syscall_dict)
+            sequences = (self._create_attack_sequences(parsed, attack_ts, syscall_dict)
+                         if label and attack_ts
+                         else self._create_normal_sequences(parsed, syscall_dict))
             
             return label, sequences
             
@@ -241,10 +245,11 @@ class LIDDatasetLoader:
             return None
         
         exploit_info = metadata.get("time", {}).get("exploit", [])
-        if not exploit_info or "absolute" not in exploit_info[0]:
-            return None
+        if exploit_info and "absolute" in exploit_info[0]:
+            return int(str(exploit_info[0]["absolute"]).split(".")[0]) # timestamp we want to check
+
+        return None
         
-        return int(str(exploit_info[0]["absolute"]).split(".")[0]) # timestamp we want to check
     
     def _parse_syscall_lines(self, lines: List) -> List[Tuple[int, str]]:
         """
@@ -266,24 +271,6 @@ class LIDDatasetLoader:
             except (IndexError, UnicodeDecodeError):
                 pass
         return parsed
-    
-    def _create_sequences(self, parsed: List[Tuple[int, str]], label: int, 
-                         attack_ts: Optional[int], syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """
-        Create sequences from parsed syscall data.
-        
-        Args:
-            parsed (List[Tuple[int, str]]): List of (timestamp, syscall_name) tuples.
-            label (int): Label indicating attack (1) or normal (0).
-            attack_ts (Optional[int]): Attack timestamp if available.
-            syscall_dict (Dict[str, int]): Dictionary mapping syscall names to IDs.
-            
-        Returns:
-            List[List[int]]: List of syscall ID sequences.
-        """
-        return (self._create_attack_sequences(parsed, attack_ts, syscall_dict) 
-                if label and attack_ts 
-                else self._create_normal_sequences(parsed, syscall_dict))
     
     def _create_attack_sequences(self, parsed: List[Tuple[int, str]], 
                                attack_ts: int, syscall_dict: Dict[str, int]) -> List[List[int]]:
@@ -394,34 +381,27 @@ class LIDDatasetLoader:
         
         return result
     
-    def _save_splits(self, splits: Dict[str, Tuple[List[List[int]], List[int]]]) -> None:
+    def _save_split(self, sequences: List[List[int]], labels: List[int], split_name: str, label: int) -> None:
         """
-        Save data splits to HDF5 files.
-        
+        Save sequences of a specific label (attack or normal) to an HDF5 file.
+
         Args:
-            splits (Dict[str, Tuple[List[List[int]], List[int]]]): Dictionary containing 
-                train/validation/test splits with sequences and labels.
+            sequences (List[List[int]]): List of syscall sequences.
+            labels (List[int]): Corresponding labels for the sequences.
+            split_name (str): Name of the data split (e.g., 'training', 'validation', 'test').
+            label (int): Label to filter sequences (1 for attack, 0 for normal).
         """
-        for split_name, (seqs, lbls) in splits.items():
-            attack_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 1]
-            normal_seqs = [s for s, label in zip(seqs, lbls, strict=True) if label == 0]
-
-            if attack_seqs:
-                path = os.path.join(self.data_dir, f"1_{split_name}.h5")
-                logger.info(f"Saving {len(attack_seqs)} attack {split_name} sequences to {path}")
-                save_sequences_to_h5(attack_seqs, path)
-
-            if normal_seqs:
-                path = os.path.join(self.data_dir, f"0_{split_name}.h5")
-                logger.info(f"Saving {len(normal_seqs)} normal {split_name} sequences to {path}")
-                save_sequences_to_h5(normal_seqs, path)
-
+        filtered = [s for s, lbl in zip(sequences, labels, strict=True) if lbl == label]
+        if not filtered:
+            return
+        
+        path = os.path.join(self.data_dir, f"{label}_{split_name}.h5")
+        logger.info(f"Saving {len(filtered)} sequences to {path}")
+        save_sequences_to_h5(filtered, path)
 
 def main() -> None:
     """Entry point for the LID dataset loader."""
-    loader = LIDDatasetLoader()
-    loader.process_dataset()
-
+    LIDDatasetLoader().process_dataset()
 
 if __name__ == "__main__":
     main()
