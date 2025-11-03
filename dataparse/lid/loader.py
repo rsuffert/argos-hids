@@ -281,40 +281,12 @@ class LIDDatasetLoader:
         Returns:
             List[List[int]]: List of syscall ID sequences.
         """
-        return (self._create_attack_sequences(parsed, attack_ts, syscall_dict) 
-                if label and attack_ts 
-                else self._create_normal_sequences(parsed, syscall_dict))
-    
-    def _create_attack_sequences(self, parsed: List[Tuple[int, str]], 
-                               attack_ts: int, syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """
-        Create attack sequences starting from attack timestamp.
+        if label and attack_ts:
+            start_idx = next((i for i, (ts, _) in enumerate(parsed) if ts >= attack_ts), 0)
+            names = [name for _, name in parsed[start_idx:]]
+            seq = [syscall_dict[name] for name in names if name in syscall_dict]
+            return [seq[:SEQUENCE_LENGTH]] if seq else []
         
-        Args:
-            parsed (List[Tuple[int, str]]): List of (timestamp, syscall_name) tuples.
-            attack_ts (int): Attack timestamp to start from.
-            syscall_dict (Dict[str, int]): Dictionary mapping syscall names to IDs.
-            
-        Returns:
-            List[List[int]]: List containing single attack sequence.
-        """
-        start_idx = next((i for i, (ts, _) in enumerate(parsed) if ts >= attack_ts), 0)
-        names = [name for _, name in parsed[start_idx:]]
-        seq = [syscall_dict[name] for name in names if name in syscall_dict]
-        return [seq[:SEQUENCE_LENGTH]] if seq else []
-    
-    def _create_normal_sequences(self, parsed: List[Tuple[int, str]], 
-                               syscall_dict: Dict[str, int]) -> List[List[int]]:
-        """
-        Create normal sequences using sliding window approach.
-        
-        Args:
-            parsed (List[Tuple[int, str]]): List of (timestamp, syscall_name) tuples.
-            syscall_dict (Dict[str, int]): Dictionary mapping syscall names to IDs.
-            
-        Returns:
-            List[List[int]]: List of normal sequences.
-        """
         sequences = []
         for i in range(0, len(parsed), SEQUENCE_LENGTH):
             chunk = parsed[i:i + SEQUENCE_LENGTH]
