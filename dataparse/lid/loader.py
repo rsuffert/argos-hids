@@ -104,9 +104,7 @@ class LIDDatasetLoader:
         # dump syscall mapping to csv
         csv_path = os.path.join(self.data_dir, SYSCALL_MAPPING_DUMP_PATH)
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            for name, id_ in syscall_dict.items():
-                writer.writerow([name, id_])
+            csv.writer(f).writerows(syscall_dict.items())
         logger.info(f"Dumped syscall mapping to {csv_path}")
         
         sequences, labels = self._process_files(zip_files, syscall_dict)
