@@ -150,7 +150,7 @@ class LIDDatasetLoader:
     
     def _extract_syscalls_from_zip(self, zip_path: str) -> set:
         """Extract syscalls from a single ZIP file."""
-        syscalls = set()
+        syscalls: set[str] = set()
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 sc_files = [fname for fname in zf.namelist() if fname.endswith(".sc")]
