@@ -17,6 +17,7 @@ from typing import Dict
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 from lib.preprocessing.graph_preprocess_dataset import preprocess_dataset
+from lib.data.dataset import load_dataset
 
 # Dataset paths
 DATA_DIR = os.getenv("DATA_DIR", ".")
@@ -145,22 +146,21 @@ def convert_h5_to_traces(h5_path: str,
 def preprocess_traces_to_graphs_train() -> None:
     """Preprocess training traces to graph format."""
     output_filepath = preprocess_dataset(TRAIN_TRACES_DIR, False, False, PKL_TRACES_FILENAME)
-    print(f"Graphs saved to {output_filepath}")
+    logging.info(f"Graphs saved to {output_filepath}")
 
 
 def preprocess_traces_to_graphs_infer() -> None:
     """Preprocess inference traces to graph format using training vocabulary."""
-    assert os.path.exists(f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}"), \
+    train_pkl_path = f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}"
+    assert os.path.exists(train_pkl_path), \
         "Training dataset not found, please run preprocessing for training first."
     
-    with open(f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}", "rb") as f:
-        data = pickle.load(f)
-        vocab = data["vocab"]
+    _, _, vocab = load_dataset(train_pkl_path)
     
     output_filepath = preprocess_dataset(
         INFER_TRACES_DIR, False, False, PKL_TRACES_FILENAME, vocab=vocab
     )
-    print(f"Graphs saved to {output_filepath}")
+    logging.info(f"Graphs saved to {output_filepath}")
 
 
 def train_gnn_model() -> None:
@@ -183,6 +183,7 @@ if __name__ == "__main__":
 
     if args.extract:
         logging.info("Converting H5 files to trace files...")
+        
         def extract_normal() -> None:
             """Extract normal traces for training and inference."""
             counter = convert_h5_to_traces(os.path.join(data_dir, NORMAL_TRAIN_H5), f"{TRAIN_TRACES_DIR}/normal")
@@ -208,6 +209,7 @@ if __name__ == "__main__":
             p.start()
         for p in procs: 
             p.join()
+        
         logging.info("H5 to trace extraction finished.")
 
     if args.preprocess_train:
