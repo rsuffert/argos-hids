@@ -24,7 +24,6 @@ INPUT_SIZE = 1              # Each element in the sequence is a scalar
 HIDDEN_SIZE = 64            # Number of hidden units in the LSTM
 NUM_LAYERS = 2              # Number of stacked LSTM layers
 LEARNING_RATE = 1e-3        # Learning rate for the optimizer
-DROPOUT = 0.1               # Dropout rate for regularization
 BATCH_SIZE = 64             # Batch size for DataLoader
 MAX_EPOCHS = 40             # Number of training epochs
 MAX_SEQ_LEN = 2048          # Maximum sequence length for padding/truncation
@@ -68,7 +67,6 @@ class LSTMAutoencoderConfig:
     hidden_size: int = HIDDEN_SIZE
     num_layers: int = NUM_LAYERS
     lr: float = LEARNING_RATE
-    dropout: float = DROPOUT
 
 class LSTMAutoencoder(pl.LightningModule):
     """LSTM autoencoder for anomaly detection."""
@@ -92,7 +90,6 @@ class LSTMAutoencoder(pl.LightningModule):
         self.pos_embedding = torch.nn.Embedding(MAX_SEQ_LEN, self.hidden_size)
         self.output_layer = torch.nn.Linear(config.hidden_size, config.input_size)
         self.criterion = torch.nn.MSELoss() # to measure how well the autoencoder reconstructs the input
-        self.dropout = torch.nn.Dropout(config.dropout)
 
     def forward(self, x: Tensor, lengths: Tensor) -> Tensor:
         """Forward pass through encoder-decoder autoencoder."""
@@ -110,7 +107,7 @@ class LSTMAutoencoder(pl.LightningModule):
         pos_emb = self.pos_embedding(positions)
         h_with_pos = h_repeated + pos_emb
 
-        return self.output_layer(self.dropout(h_with_pos))
+        return self.output_layer(h_with_pos)
 
 
     def shared_step(self, batch: Tuple[Tensor, Tensor]) -> Tensor:
