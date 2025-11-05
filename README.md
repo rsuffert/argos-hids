@@ -65,3 +65,5 @@ The solution is organized in the following manner:
 - The `models` folder contains the scripts to train the intrusion detection models. Each sub-folder represents a ML model, and the `inference.py` Python module can be used to apply those models for inference in production.
 - The `notifications` folder contains the scripts to use the Ntfy functionality to send intrusion detection notifications.
 - The `tetragon` folder contains the functionality for monitoring the host system and collecting the syscalls that are happening on the machine.
+- The `trained` folder contains the pre-trained binary models and syscall mappings files that can be supplied through the `TRAINED_MODEL_PATH` and `SYSCALL_MAPPING_PATH` environment variables, respectively, organized by the dataset they correspond to.
+  - **IMPORTANT:** This folder is managed with Git Large File Storage (LFS). In order to properly download those, please make sure to install Git LFS with `sudo apt-get install git-lfs`.
