@@ -102,7 +102,7 @@ class LSTMAutoencoder(pl.LightningModule):
         _, (h_n, _) = self.encoder(packed_input)
 
         batch_size, seq_len = x.size(0), x.size(1)
-        h_repeated = h_n[-1].unsqueeze(1).repeat(1, seq_len, 1)
+        h_repeated = h_n[-1].unsqueeze(-1).repeat(1, seq_len, 1)
 
         positions = (torch.arange(seq_len, device=x.device)
                           .unsqueeze(0)
