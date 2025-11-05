@@ -10,7 +10,6 @@ import h5py
 import logging
 import argparse
 import subprocess
-import pickle
 import multiprocessing
 from typing import Dict
 
