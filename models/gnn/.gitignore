@@ -3,3 +3,6 @@ traces_*/
 
 # Pre-processed traces to graph format
 *.pkl
+
+# Training
+experiments/
