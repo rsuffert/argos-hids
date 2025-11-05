@@ -29,7 +29,7 @@ MAX_EPOCHS = 40             # Number of training epochs
 MAX_SEQ_LEN = 2048          # Maximum sequence length for padding/truncation
 EARLY_STOP_PATIENCE = 5     # Patience for early stopping training
 EARLY_STOP_MIN_DELTA = 50   # Minimum change to qualify as an improvement
-THRESHOLD_PERCENTILE = 95.0 # Percentile of reconstruction errors to use as anomaly detection threshold
+TARGET_FPR = 0.05           # Target FPR for anomaly detection threshold calibration
 
 # ==========================
 # Dataset (H5 files) paths
@@ -187,6 +187,7 @@ class LSTMAutoencoder(pl.LightningModule):
         Returns:
             bool: True if the sequence is malicious; False otherwise.
         """
+        sequence = sequence.to(torch.float32)
         return self.reconstruction_error(sequence) > self.threshold # type: ignore[operator]
     
     @torch.jit.export
@@ -272,32 +273,42 @@ def sanity_check() -> None:
         
         print("========= All Sanity Checks Passed! =========\n")
 
-def compute_threshold(
+def calibrate_threshold(
     model: LSTMAutoencoder,
     dataloader: torch.utils.data.DataLoader,
-    percentile: float = 95.0
+    device: torch.device,
+    target_fpr: float = 0.05
 ) -> float:
     """
-    Computes the reconstruction error threshold from a dataloader.
+    Calibrates the anomaly detection threshold based on the validation set to
+    achieve a target false positive rate (FPR).
 
     Args:
-        model (LSTMAutoencoder): The trained autoencoder model.
-        dataloader (torch.utils.data.DataLoader): DataLoader with normal validation sequences.
-        percentile (float): The percentile to use for threshold selection (default: 95.0).
+        model (nn.Module): The trained LSTM autoencoder model.
+        dataloader (DataLoader): DataLoader for the dataset against which the threshold will
+                                 be calibrated.
+        device (torch.device): Device to run the evaluation on (CPU or CUDA).
+        target_fpr (float, optional): Desired false positive rate for threshold calibration.
+                                      Defaults to 0.05.
 
     Returns:
-        float: The computed threshold value.
+        float: The calibrated reconstruction error threshold.
     """
     model.eval()
-    errors: List[float] = []
+    reconstruction_errors = []
+
     with torch.no_grad():
         for batch in dataloader:
             sequences, lengths = batch
+            sequences = sequences.to(device)
+            lengths = lengths.to(device)
             for i in range(sequences.size(0)):
-                seq_len = int(lengths[i].item())
+                seq_len = lengths[i].item()
                 seq = sequences[i, :seq_len]
-                errors.append(model.reconstruction_error(seq))
-    return float(np.percentile(errors, percentile))
+                error = model.reconstruction_error(seq)
+                reconstruction_errors.append(error)
+
+    return float(np.percentile(reconstruction_errors, (1 - target_fpr) * 100))
 
 def main() -> None:
     """Main function to train the LSTM autoencoder."""
@@ -355,9 +366,10 @@ def main() -> None:
     )
     trainer.fit(model, train_loader, valid_loader)
 
-    model.set_threshold(compute_threshold(
-        model, valid_loader, THRESHOLD_PERCENTILE
-    ))
+    device = next(model.parameters()).device
+    threshold = calibrate_threshold(model, valid_loader, device, TARGET_FPR)
+    print(f"Setting threshold to {threshold} (FPR {TARGET_FPR})")
+    model.set_threshold(threshold)
     torch.jit.script(model).save("lstm-autoencoder.pt")
 
 if __name__ == "__main__":
