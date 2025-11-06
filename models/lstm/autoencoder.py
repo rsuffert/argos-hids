@@ -56,7 +56,7 @@ def collate(batch: List[Tuple[np.ndarray, int]]) -> Tuple[Tensor, Tensor]:
          for seq in sequences],
         dtype=torch.long
     )
-    # padding sequences with zeros to the maximum length in the batch
+    # padding sequences with -1 to the maximum length in the batch
     padded_sequences = pad_sequence(sequences, batch_first=True, padding_value=-1)
     return padded_sequences, lengths
 
