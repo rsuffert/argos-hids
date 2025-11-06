@@ -66,4 +66,7 @@ The solution is organized in the following manner:
 - The `notifications` folder contains the scripts to use the Ntfy functionality to send intrusion detection notifications.
 - The `tetragon` folder contains the functionality for monitoring the host system and collecting the syscalls that are happening on the machine.
 - The `trained` folder contains the pre-trained binary models and syscall mappings files that can be supplied through the `TRAINED_MODEL_PATH` and `SYSCALL_MAPPING_PATH` environment variables, respectively, organized by the dataset they correspond to.
-  - **IMPORTANT:** This folder is managed with Git Large File Storage (LFS). In order to properly download those, please make sure to install Git LFS with `sudo apt-get install git-lfs`.
+  - **IMPORTANT:** This folder is managed with Git Large File Storage (LFS). In order to properly download those files, please make sure to install Git LFS.
+    - On Debian/Ubuntu, you can install it with: `sudo apt-get install git-lfs`
+    - For other operating systems (macOS, Windows, RHEL/Fedora, Arch, etc.), please refer to the official [Git LFS installation instructions](https://git-lfs.com/) for platform-specific guidance.
+    - Once installed, you need to run `git lfs install` to set up Git LFS hooks. If you cloned the repository before installing Git LFS, run `git lfs pull` to download the LFS-managed files.
