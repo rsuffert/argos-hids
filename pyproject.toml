@@ -1,6 +1,7 @@
 [tool.ruff]
 exclude = [
-    "tetragon/proto/*" # proto-generated files
+    "tetragon/proto/*", # proto-generated files
+    "models/gnn/lib"    # git submodule
 ]
 lint.select = [
     "E",    # Enforce pycodestyle errors (style, whitespace)
@@ -47,7 +48,9 @@ dependencies = [
     "grpcio (>=1.74.0,<2.0.0)",
     "grpcio-tools (>=1.74.0,<2.0.0)",
     "pyseccomp (>=0.1.2,<0.2.0)",
-    "python-dotenv (>=1.1.1,<2.0.0)"
+    "python-dotenv (>=1.1.1,<2.0.0)",
+    "matplotlib (>=3.10.6,<4.0.0)",
+    "scikit-learn (>=1.7.2,<2.0.0)"
 ]
 
 [tool.poetry]
