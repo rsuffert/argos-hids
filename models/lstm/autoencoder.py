@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import h5py
 import numpy as np
+import logging
 
 torch.backends.cudnn.enabled = False
 
@@ -125,22 +126,6 @@ class LSTMAutoencoder(pl.LightningModule):
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         """Training step for one batch."""
         loss = self.shared_step(batch)
-
-        # debug logging every 100 batches
-        if batch_idx % 100 == 0:
-            sequences, lengths = batch
-            sequences = sequences.unsqueeze(-1)
-            reconstructed = self(sequences, lengths)
-            
-            seq_len = int(lengths[0].item())
-            orig_sample = sequences[0, :seq_len, 0].cpu().numpy()
-            recon_sample = reconstructed[0, :seq_len, 0].detach().cpu().numpy()
-            
-            print(f"Batch {batch_idx}")
-            print(f"Original:     {orig_sample[:10]}")  # First 10 syscalls
-            print(f"Reconstructed: {recon_sample[:10]}")
-            print(f"Loss: {loss:.4f}")
-
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -238,7 +223,7 @@ class H5LazyDataset(torch.utils.data.Dataset):
 
 def sanity_check() -> None:
     """Quick sanity check to verify the model is correctly configured before training."""
-    print("========= Quick Sanity Check =========")
+    logging.info("========= Quick Sanity Check =========")
     
     dummy_sequences = torch.tensor([
         # sequences padded with -1
@@ -258,7 +243,7 @@ def sanity_check() -> None:
 
         assert not torch.isnan(output).any(), "Output contains NaN values!"
         assert not torch.isinf(output).any(), "Output contains Inf values!"
-        print("✅ No NaN/Inf values detected")
+        logging.info("No NaN/Inf values detected")
 
         for i in range(len(dummy_sequences)):
             seq_len = dummy_lengths[i]
@@ -268,10 +253,10 @@ def sanity_check() -> None:
             unique_outputs = torch.unique(output_seq)
             assert len(unique_outputs) > 1, f"Sequence {i}: Output stuck on single value {output_seq[0].item()}"
 
-            print(f"✅ Sequence {i+1} (len {seq_len}): Input {input_seq.tolist()}")
-            print(f"    Reconstructed: {output_seq.tolist()}")
-        
-        print("========= All Sanity Checks Passed! =========\n")
+            logging.info(f"Sequence {i+1} (len {seq_len}): Input {input_seq.tolist()}")
+            logging.info(f"Reconstructed: {output_seq.tolist()}")
+
+        logging.info("========= All Sanity Checks Passed! =========\n")
 
 def calibrate_threshold(
     model: LSTMAutoencoder,
@@ -368,9 +353,13 @@ def main() -> None:
 
     device = next(model.parameters()).device
     threshold = calibrate_threshold(model, valid_loader, device, TARGET_FPR)
-    print(f"Setting threshold to {threshold} (FPR {TARGET_FPR})")
+    logging.info(f"Setting threshold to {threshold} (FPR {TARGET_FPR})")
     model.set_threshold(threshold)
     torch.jit.script(model).save("lstm-autoencoder.pt")
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(message)s"
+    )
     main()
