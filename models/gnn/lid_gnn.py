@@ -12,7 +12,7 @@ import argparse
 import subprocess
 import multiprocessing
 import pickle
-from typing import Dict
+import csv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
@@ -53,49 +53,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_syscall_tbl(path: str) -> Dict[int, str]:
-    """Parse syscall table file to create ID-to-name mapping."""
-    syscalls_map: Dict[int, str] = {}
-    if path.endswith(".pkl"):
-        try:
-            with open(path, "rb") as f:
-                data = pickle.load(f)
-               
-                if data and isinstance(next(iter(data.keys())), str):
-                    syscalls_map = {v: k for k, v in data.items()}
-                else:
-                    syscalls_map = data
-            logging.info(f"Loaded {len(syscalls_map)} syscall mappings from pickle")
-            return syscalls_map
-        except Exception as e:
-            logging.error(f"Failed to load pickle file: {e}")
-            return syscalls_map
-    
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.startswith("#") or not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) >= 3:
-                syscalls_map[int(parts[0])] = parts[2]
-
-    return syscalls_map
-
-
-def _write_trace_file(syscall_names: list, trace_path: str) -> None:
-    """Write syscall names to trace file."""
+def _write_trace_file(syscall_ids: list, trace_path: str) -> None:
+    """Write syscall IDs to trace file as space-separated integers."""
     with open(trace_path, "w", encoding="utf-8") as f:
-        for name in syscall_names:
-            f.write(f"{name}(\n")
+        f.write(" ".join(str(sid) for sid in syscall_ids))
 
 
 def _process_sequence(
-    seq: list, current_file_id: int, syscall_map: Dict[int, str], output_dir: str, files_per_subdir: int
+    seq: list, current_file_id: int, output_dir: str, files_per_subdir: int
 ) -> None:
     """Process a single sequence and write to trace file."""
-    syscall_names = [syscall_map.get(int(sid), f"unknown_{sid}") for sid in seq]
-    
-    if len(syscall_names) < 2:
+    if len(seq) < 2:
         return
 
     subdir_index = current_file_id // files_per_subdir
@@ -103,11 +71,11 @@ def _process_sequence(
     os.makedirs(subdir_path, exist_ok=True)
 
     trace_path = os.path.join(subdir_path, f"trace_{current_file_id}.txt")
-    _write_trace_file(syscall_names, trace_path)
+    _write_trace_file(seq, trace_path)  # Pass seq directly (already IDs)
 
 
 def _process_h5_sequences(
-    h5f: h5py.File, start_counter: int, syscall_map: Dict[int, str], output_dir: str, files_per_subdir: int
+    h5f: h5py.File, start_counter: int, output_dir: str, files_per_subdir: int
 ) -> int:
     """Process all sequences from H5 file."""
     if "sequences" not in h5f:
@@ -118,14 +86,13 @@ def _process_h5_sequences(
     num_sequences = len(sequences)
 
     for i, seq in enumerate(sequences):
-        _process_sequence(seq, start_counter + i, syscall_map, output_dir, files_per_subdir)
+        _process_sequence(seq, start_counter + i, output_dir, files_per_subdir)
 
     return start_counter + num_sequences
 
 
 def convert_h5_to_traces(h5_path: str,
                          output_dir: str,
-                         syscall_tbl_path: str = "syscall_64.tbl",
                          files_per_subdir: int = 500,
                          start_counter: int = 0) -> int:
     """
@@ -134,7 +101,6 @@ def convert_h5_to_traces(h5_path: str,
     Args:
         h5_path (str): Path to input H5 file
         output_dir (str): Output directory for trace files
-        syscall_tbl_path (str): Path to syscall table file
         files_per_subdir (int): Number of files per subdirectory
         start_counter (int): Starting counter for file naming
         
@@ -142,7 +108,6 @@ def convert_h5_to_traces(h5_path: str,
         int: Updated counter after processing all sequences
     """
     logging.info(f"Processing {os.path.basename(h5_path)}...")
-    syscall_map = parse_syscall_tbl(syscall_tbl_path)
     os.makedirs(output_dir, exist_ok=True)
 
     if not os.path.exists(h5_path):
@@ -151,7 +116,7 @@ def convert_h5_to_traces(h5_path: str,
 
     try:
         with h5py.File(h5_path, "r") as h5f:
-            new_counter = _process_h5_sequences(h5f, start_counter, syscall_map, output_dir, files_per_subdir)
+            new_counter = _process_h5_sequences(h5f, start_counter, output_dir, files_per_subdir)
             processed = new_counter - start_counter
             logging.info(f"Processed {processed} sequences from {os.path.basename(h5_path)}")
             return new_counter
@@ -180,6 +145,25 @@ def preprocess_traces_to_graphs_infer() -> None:
     logging.info(f"Graphs saved to {output_filepath}")
 
 
+def export_syscall_dict_to_csv(data_dir: str, output_csv: str = "syscall_mapping.csv") -> None:
+    """Export syscall_dict.pkl as CSV for use in main.py."""
+    syscall_dict_path = os.path.join(data_dir, "syscall_dict.pkl")
+    
+    if not os.path.exists(syscall_dict_path):
+        logging.warning(f"syscall_dict.pkl not found at {syscall_dict_path}")
+        return
+    
+    with open(syscall_dict_path, "rb") as f:
+        syscall_dict = pickle.load(f)
+    
+    with open(output_csv, "w", newline="") as f:
+        writer = csv.writer(f)
+        for name, sid in syscall_dict.items():
+            writer.writerow([name, sid])
+    
+    logging.info(f"Syscall mapping exported to {output_csv} ({len(syscall_dict)} mappings)")
+
+
 def train_gnn_model() -> None:
     """Train GNN model using preprocessed graphs."""
     assert os.path.exists(f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}"), \
@@ -197,7 +181,6 @@ if __name__ == "__main__":
     args = parse_args()
     
     data_dir = args.data_dir
-    syscall_dict_path = os.path.join(data_dir, "syscall_dict.pkl")
 
     if args.extract:
         logging.info("Converting H5 files to trace files...")
@@ -206,38 +189,32 @@ if __name__ == "__main__":
             """Extract normal traces for training and inference."""
             counter = convert_h5_to_traces(
                 os.path.join(data_dir, NORMAL_TRAIN_H5), 
-                f"{TRAIN_TRACES_DIR}/normal",
-                syscall_dict_path  
+                f"{TRAIN_TRACES_DIR}/normal"
             )
             counter = convert_h5_to_traces(
                 os.path.join(data_dir, NORMAL_VALID_H5), 
                 f"{TRAIN_TRACES_DIR}/normal",
-                syscall_dict_path,  
                 start_counter=counter
             )
             convert_h5_to_traces(
                 os.path.join(data_dir, NORMAL_TEST_H5), 
-                f"{INFER_TRACES_DIR}/normal",
-                syscall_dict_path 
+                f"{INFER_TRACES_DIR}/normal"
             )
         
         def extract_attack() -> None:
             """Extract attack traces for training and inference."""
             counter = convert_h5_to_traces(
                 os.path.join(data_dir, ATTACK_TRAIN_H5), 
-                f"{TRAIN_TRACES_DIR}/attack",
-                syscall_dict_path  
+                f"{TRAIN_TRACES_DIR}/attack"
             )
             counter = convert_h5_to_traces(
                 os.path.join(data_dir, ATTACK_VALID_H5), 
                 f"{TRAIN_TRACES_DIR}/attack",
-                syscall_dict_path,
                 start_counter=counter
             )
             convert_h5_to_traces(
                 os.path.join(data_dir, ATTACK_TEST_H5), 
-                f"{INFER_TRACES_DIR}/attack",
-                syscall_dict_path
+                f"{INFER_TRACES_DIR}/attack"
             )
         
         procs = [multiprocessing.Process(target=f) for f in [extract_normal, extract_attack]]
@@ -247,6 +224,7 @@ if __name__ == "__main__":
             p.join()
         
         logging.info("H5 to trace extraction finished.")
+        export_syscall_dict_to_csv(data_dir)
 
     if args.preprocess_train:
         logging.info("Preprocessing traces to graphs for training...")
