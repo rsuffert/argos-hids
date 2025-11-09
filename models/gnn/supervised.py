@@ -13,12 +13,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 from lib.data.dataset import load_dataset
 from lib.preprocessing.graph_preprocess_dataset import preprocess_dataset
 
-NORMAL_TRAIN_H5 = os.getenv("NORMAL_TRAIN_H5", "0_training.h5")
-NORMAL_VALID_H5 = os.getenv("NORMAL_VALID_H5", "0_validation.h5")
-NORMAL_TEST_H5  = os.getenv("NORMAL_TEST_H5",  "0_test.h5")
-ATTACK_TRAIN_H5 = os.getenv("ATTACK_TRAIN_H5", "1_training.h5")
-ATTACK_VALID_H5 = os.getenv("ATTACK_VALID_H5", "1_validation.h5")
-ATTACK_TEST_H5  = os.getenv("ATTACK_TEST_H5",  "1_test.h5")
+NORMAL_TRAIN_H5 = os.getenv("NORMAL_TRAIN_H5", "Normal_DTDS-train.h5")
+NORMAL_VALID_H5 = os.getenv("NORMAL_VALID_H5", "Normal_DTDS-validation.h5")
+NORMAL_TEST_H5  = os.getenv("NORMAL_TEST_H5",  "Normal_DTDS-test.h5")
+ATTACK_TRAIN_H5 = os.getenv("ATTACK_TRAIN_H5", "Attach_DTDS-train.h5")
+ATTACK_VALID_H5 = os.getenv("ATTACK_VALID_H5", "Attach_DTDS-validation.h5")
+ATTACK_TEST_H5  = os.getenv("ATTACK_TEST_H5",  "Attach_DTDS-test.h5")
 
 TRAIN_TRACES_DIR    = "traces_train"
 INFER_TRACES_DIR    = "traces_infer"
