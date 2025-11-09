@@ -1,6 +1,6 @@
 # LSTM ARGOS-HIDS Model
 
-This folder contains the implementation and related files for the LSTM (Long Short-Term Memory) model used in the Argos-HIDS project.
+This folder contains the implementation and related files for the LSTM (Long Short-Term Memory) model used in the Argos-HIDS project. The `supervised.py` script contains the implementation for the training of a regular LSTM model, whereas the `autoencoder.py` script is the training for an unsupervised LSTM autoencoder.
 
 ## Pre-Requisites
 
@@ -25,7 +25,11 @@ This folder contains the implementation and related files for the LSTM (Long Sho
 
 3. **Train the model:**
     ```bash
-    poetry run python3 trainer.py
+    # to train the supervised LSTM
+    poetry run python3 supervised.py
+
+    # to train the LSTM autoencoder
+    poetry run python3 autoencoder.py
     ```
 
-The trainer script will take care of automatically saving the model of the best epoch (according to F1 score on the validation set) to the `./lstm.pt` file.
+The trainer scripts will take care of automatically saving the trained model to the `./lstm.pt` and `./lstm-autoencoder.pt` files.
