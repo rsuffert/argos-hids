@@ -21,7 +21,6 @@ from lib.data.dataset import load_dataset
 
 # Dataset paths
 DATA_DIR = os.getenv("DATA_DIR", ".")
-DATASET_NAME = os.getenv("DATASET_NAME", "lid-ds")
 
 # H5 file paths from environment or defaults
 NORMAL_TRAIN_H5 = os.getenv("NORMAL_TRAIN_H5", "0_training.h5")
@@ -146,16 +145,30 @@ def preprocess_traces_to_graphs_infer() -> None:
 
 
 def export_syscall_dict_to_csv(data_dir: str, output_csv: str = "syscall_mapping.csv") -> None:
-    """Export syscall_dict.pkl as CSV for use in main.py."""
+    """
+    Export syscall_dict.pkl as CSV for use in inference for main.py.
+    
+    This function bridges the gap between the LID dataset loader and the main.py inference pipeline.
+    The LID loader creates syscall_dict.pkl (name -> ID mapping) for data processing.
+    main.py needs this mapping in CSV format to convert syscall names from Tetragon to IDs for model inference.
+    
+    Args:
+        data_dir (str): Directory containing syscall_dict.pkl (created by LID loader)
+        output_csv (str): Output CSV file path (default: syscall_mapping.csv)
+    """
+    # Construct path to the pickle file created by the LID dataset loader
     syscall_dict_path = os.path.join(data_dir, "syscall_dict.pkl")
     
+    # Check if the pickle file exists (it should be created by dataparse/lid/loader.py)
     if not os.path.exists(syscall_dict_path):
         logging.warning(f"syscall_dict.pkl not found at {syscall_dict_path}")
         return
     
+    # Load the syscall dictionary from pickle format
     with open(syscall_dict_path, "rb") as f:
         syscall_dict = pickle.load(f)
     
+    # Export to CSV format that main.py can load
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
         for name, sid in syscall_dict.items():
