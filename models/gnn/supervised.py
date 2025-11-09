@@ -2,13 +2,11 @@
 
 import os
 import h5py
-import sys
+import pathlib
 import logging
 import argparse
 import subprocess
 import multiprocessing
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "lib"))
 
 from lib.data.dataset import load_dataset
 from lib.preprocessing.graph_preprocess_dataset import preprocess_dataset
@@ -44,29 +42,22 @@ def parse_args() -> argparse.Namespace:
 
 def convert_h5_to_traces(
     h5_path: str,
-    output_dir: str
+    output_dir: str,
+    batch_size: int = 500
 ) -> None:
     """
     Converts sequences of syscall IDs from an H5 file into trace files with numeric IDs, space-separated on one line.
+    Trace files contain a single syscall trace and are organized into subdirectories, each containing a maximum of a
+    pre-defined number of files to avoid hitting filesystem limits.
 
     Args:
         h5_path (str): Path to the input H5 file containing syscall sequences.
         output_dir (str): Directory where the generated trace files will be saved.
+        batch_size (int, optional): Maximum number of trace files per subdirectory. Defaults to 500.
     """
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Find the highest existing trace counter to avoid overwriting
-    existing_files = []
-    for _, _, files in os.walk(output_dir):
-        for f in files:
-            if f.startswith("trace_") and f.endswith(".txt"):
-                try:
-                    num = int(f[6:-4])  # Extract number from "trace_XXX.txt"
-                    existing_files.append(num)
-                except ValueError:
-                    continue
-    counter = max(existing_files) + 1 if existing_files else 0
-    
+    existing_files_iter = pathlib.Path(output_dir).rglob("**/trace_*.txt")
+    counter = len(list(existing_files_iter))
     with h5py.File(h5_path, "r") as h5f:
         sequences = h5f["sequences"]
         for seq in sequences:
@@ -74,14 +65,13 @@ def convert_h5_to_traces(
                 # skip sequences with one or zero syscalls as they cannot be
                 # used to build a graph
                 continue
-            # Add batching: create subdirectories with 500 files each
-            subdir_index = counter // 500
+            subdir_index = counter // batch_size
             subdir_path = os.path.join(output_dir, f"batch_{subdir_index}")
             os.makedirs(subdir_path, exist_ok=True)
             trace_path = os.path.join(subdir_path, f"trace_{counter}.txt")
             logging.debug(f"Writing {trace_path} with {len(seq)} syscalls")
-            with open(trace_path, "w") as trace_file:
-                trace_file.write(" ".join(str(id) for id in seq))
+            with open(trace_path, "w") as f:
+                f.write(" ".join(str(id) for id in seq))
             counter += 1
 
 def preprocess_traces_to_graphs_train() -> None:
@@ -126,14 +116,14 @@ if __name__ == "__main__":
         logging.info("Converting H5 files to trace files...")
         def extract_normal() -> None:
             """Wrapper for extracting normal traces from H5 files."""
-            convert_h5_to_traces(NORMAL_TRAIN_H5, f"{TRAIN_TRACES_DIR}/normal")  
-            convert_h5_to_traces(NORMAL_VALID_H5, f"{TRAIN_TRACES_DIR}/normal")  
-            convert_h5_to_traces(NORMAL_TEST_H5,  f"{INFER_TRACES_DIR}/normal")  
+            convert_h5_to_traces(NORMAL_TRAIN_H5, f"{TRAIN_TRACES_DIR}/normal")
+            convert_h5_to_traces(NORMAL_VALID_H5, f"{TRAIN_TRACES_DIR}/normal")
+            convert_h5_to_traces(NORMAL_TEST_H5,  f"{INFER_TRACES_DIR}/normal")
         def extract_attack() -> None:
             """Wrapper for extracting attack traces from H5 files."""
-            convert_h5_to_traces(ATTACK_TRAIN_H5, f"{TRAIN_TRACES_DIR}/attack")  
-            convert_h5_to_traces(ATTACK_VALID_H5, f"{TRAIN_TRACES_DIR}/attack")  
-            convert_h5_to_traces(ATTACK_TEST_H5,  f"{INFER_TRACES_DIR}/attack")  
+            convert_h5_to_traces(ATTACK_TRAIN_H5, f"{TRAIN_TRACES_DIR}/attack")
+            convert_h5_to_traces(ATTACK_VALID_H5, f"{TRAIN_TRACES_DIR}/attack")
+            convert_h5_to_traces(ATTACK_TEST_H5,  f"{INFER_TRACES_DIR}/attack")
         normal_proc = multiprocessing.Process(target=extract_normal)
         attack_proc = multiprocessing.Process(target=extract_attack)
         normal_proc.start()
