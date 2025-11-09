@@ -11,7 +11,7 @@ This folder contains the implementation and related files for the Graph Neural N
 
 ## Usage of [`supervised.py`](./supervised.py) (DongTing and LID-DS Datasets)
 
-This script supports both the DongTing and LID-DS datasets by configuring the H5 file paths via environment variables or command-line arguments.
+This script supports both the DongTing and LID-DS datasets by configuring the H5 file paths via environment variables.
 
 1. **Install dependencies:**
     ```bash
@@ -48,23 +48,24 @@ This script supports both the DongTing and LID-DS datasets by configuring the H5
     export PYTHONPATH=$PYTHONPATH:$(pwd)/lib
     ```
 
-4. **Set required environment variables (optional, for customization):**
-    You can customize the H5 file names and paths using environment variables. Defaults are set for DongTing; override for LID-DS as needed. The defaults are for DongTing dataset.
+4. **Set required environment variables:**
+    Configure the paths to your H5 files. The script expects six H5 files (train/validation/test for both normal and attack classes).
+    
+    **For LID-DS dataset:**
     ```bash
-    export NORMAL_TRAIN_H5=<path>.h5  
-    export NORMAL_VALID_H5=<path>.h5  
-    export NORMAL_TEST_H5=<path>.h5   
-    export ATTACK_TRAIN_H5=<path>.h5  
-    export ATTACK_VALID_H5=<path>.h5  
-    export ATTACK_TEST_H5=<path>.h5   
+    export NORMAL_TRAIN_H5=<path>.h5
+    export NORMAL_VALID_H5=<path>.h5
+    export NORMAL_TEST_H5=<path>.h5
+    export ATTACK_TRAIN_H5=<path>.h5
+    export ATTACK_VALID_H5=<path>.h5
+    export ATTACK_TEST_H5=<path>.h5
     export SYSCALL_MAPPING_PATH=<path>.csv  # Required for the syscall names-to-IDs mapping outputted by the dataset pre-processing scripts
     ```
 
-5. **Run the compatibility step for extracting and putting the H5 files in the correct structure:**
+5. **Run the extraction step to convert H5 files to trace files:**
     ```bash
-    poetry run python3 supervised.py -e -d /path/to/dataset
+    poetry run python3 supervised.py -e
     ```
-    Replace `/path/to/dataset` with the directory containing your H5 files.
 
 6. **Pre-process the extracted traces for training and then for inference:**
     Training pre-processing (`-p`) must run before inference pre-processing (`-i`) because the same vocabulary applied for the training data needs to be applied for the inference data.
@@ -80,7 +81,7 @@ This script supports both the DongTing and LID-DS datasets by configuring the H5
 **NOTE:** You may as well put it all in a single command. But keep in mind that you do not need to run with `-e`, `-p`, and `-i` every time you want to train the model.
 
 ```bash
-poetry run python3 supervised.py -e -p -i -t -d /path/to/dataset
+poetry run python3 supervised.py -e -p -i -t
 ```
 
 For further information on the script parameters, run:
@@ -91,11 +92,15 @@ poetry run python3 supervised.py --help
 
 ## Usage of [`autoencoder.py`](./autoencoder.py) (Unsupervised, DongTing and LID-DS Datasets)
 
-This script supports both the DongTing and LID-DS datasets by using the processed graph files from either `supervised.py` or `lid_gnn.py`.
+This script supports both the DongTing and LID-DS datasets by using the processed graph files.
 
 1. **Set up the environment:**
     Follow steps 1-3 from the [`supervised.py` script usage](#usage-of-supervisedpy-dongting-and-lid-ds-datasets) section.
-2. **Run the training script:**
+
+2. **Ensure you have preprocessed data:**
+    You must first run `supervised.py` with the `-e`, `-p`, and `-i` flags to generate the required `processed_graphs.pkl` files in the `traces_train/` and `traces_infer/` directories.
+
+3. **Run the training script:**
     ```bash
     poetry run python3 autoencoder.py \
         --train_dataset traces_train/processed_graphs.pkl \

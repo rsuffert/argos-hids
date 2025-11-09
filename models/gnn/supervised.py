@@ -40,7 +40,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preprocess_infer", "-i", action="store_true",
                         help="Run trace to graph preprocessing for inference with the trained model")
     parser.add_argument("--train", "-t", action="store_true", help="Run graph model training")
-    parser.add_argument("--data_dir", "-d", type=str, default=".", help="Base directory containing H5 files")  # Added
     return parser.parse_args()
 
 def convert_h5_to_traces(
@@ -55,7 +54,19 @@ def convert_h5_to_traces(
         output_dir (str): Directory where the generated trace files will be saved.
     """
     os.makedirs(output_dir, exist_ok=True)
-    counter = 0  # Reset counter for batching
+    
+    # Find the highest existing trace counter to avoid overwriting
+    existing_files = []
+    for _, _, files in os.walk(output_dir):
+        for f in files:
+            if f.startswith("trace_") and f.endswith(".txt"):
+                try:
+                    num = int(f[6:-4])  # Extract number from "trace_XXX.txt"
+                    existing_files.append(num)
+                except ValueError:
+                    continue
+    counter = max(existing_files) + 1 if existing_files else 0
+    
     with h5py.File(h5_path, "r") as h5f:
         sequences = h5f["sequences"]
         for seq in sequences:
@@ -69,8 +80,8 @@ def convert_h5_to_traces(
             os.makedirs(subdir_path, exist_ok=True)
             trace_path = os.path.join(subdir_path, f"trace_{counter}.txt")
             logging.debug(f"Writing {trace_path} with {len(seq)} syscalls")
-            with open(trace_path, "w") as f:
-                f.write(" ".join(str(id) for id in seq))
+            with open(trace_path, "w") as trace_file:
+                trace_file.write(" ".join(str(id) for id in seq))
             counter += 1
 
 def preprocess_traces_to_graphs_train() -> None:
@@ -99,7 +110,7 @@ def train_gnn_model() -> None:
         "python", GNN_TRAINING_SCRIPT_PATH,
         "--dataset_path", f"{TRAIN_TRACES_DIR}/{PKL_TRACES_FILENAME}",
         "--model", "GIN",
-        "--epochs", "25",
+        "--epochs", "250",
         "--batch_size", "256",
         "--save_model_path", "gnn.pt"
     ], check=True)
@@ -111,19 +122,18 @@ if __name__ == "__main__":
     )
 
     args = parse_args()
-    data_dir = args.data_dir  # for H5 files from both datasets
     if args.extract:
         logging.info("Converting H5 files to trace files...")
         def extract_normal() -> None:
             """Wrapper for extracting normal traces from H5 files."""
-            convert_h5_to_traces(os.path.join(data_dir, NORMAL_TRAIN_H5), f"{TRAIN_TRACES_DIR}/normal")  
-            convert_h5_to_traces(os.path.join(data_dir, NORMAL_VALID_H5), f"{TRAIN_TRACES_DIR}/normal")  
-            convert_h5_to_traces(os.path.join(data_dir, NORMAL_TEST_H5),  f"{INFER_TRACES_DIR}/normal")  
+            convert_h5_to_traces(NORMAL_TRAIN_H5, f"{TRAIN_TRACES_DIR}/normal")  
+            convert_h5_to_traces(NORMAL_VALID_H5, f"{TRAIN_TRACES_DIR}/normal")  
+            convert_h5_to_traces(NORMAL_TEST_H5,  f"{INFER_TRACES_DIR}/normal")  
         def extract_attack() -> None:
             """Wrapper for extracting attack traces from H5 files."""
-            convert_h5_to_traces(os.path.join(data_dir, ATTACK_TRAIN_H5), f"{TRAIN_TRACES_DIR}/attack")  
-            convert_h5_to_traces(os.path.join(data_dir, ATTACK_VALID_H5), f"{TRAIN_TRACES_DIR}/attack")  
-            convert_h5_to_traces(os.path.join(data_dir, ATTACK_TEST_H5),  f"{INFER_TRACES_DIR}/attack")  
+            convert_h5_to_traces(ATTACK_TRAIN_H5, f"{TRAIN_TRACES_DIR}/attack")  
+            convert_h5_to_traces(ATTACK_VALID_H5, f"{TRAIN_TRACES_DIR}/attack")  
+            convert_h5_to_traces(ATTACK_TEST_H5,  f"{INFER_TRACES_DIR}/attack")  
         normal_proc = multiprocessing.Process(target=extract_normal)
         attack_proc = multiprocessing.Process(target=extract_attack)
         normal_proc.start()
