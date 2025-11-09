@@ -9,7 +9,9 @@ This folder contains the implementation and related files for the Graph Neural N
   - **LID-DS dataset**: Use [`dataparse/lid/loader.py`](../../dataparse/lid/loader.py)
 - The pre-processed `.h5` files for your chosen dataset should be generated according to the respective loader script.
 
-## Usage of [`supervised.py`](./supervised.py) (DongTing Dataset)
+## Usage of [`supervised.py`](./supervised.py) (DongTing and LID-DS Datasets)
+
+This script supports both the DongTing and LID-DS datasets by configuring the H5 file paths via environment variables or command-line arguments.
 
 1. **Install dependencies:**
     ```bash
@@ -46,21 +48,23 @@ This folder contains the implementation and related files for the Graph Neural N
     export PYTHONPATH=$PYTHONPATH:$(pwd)/lib
     ```
 
-4. **Set required environment variables:**
+4. **Set required environment variables (optional, for customization):**
+    You can customize the H5 file names and paths using environment variables. Defaults are set for DongTing; override for LID-DS as needed. The defaults are for DongTing dataset.
     ```bash
-    export NORMAL_TRAIN_H5=<path>.h5
-    export NORMAL_VALID_H5=<path>.h5
-    export NORMAL_TEST_H5=<path>.h5
-    export ATTACK_TRAIN_H5=<path>.h5
-    export ATTACK_VALID_H5=<path>.h5
-    export ATTACK_TEST_H5=<path>.h5
-    export SYSCALL_MAPPING_PATH=<path>.csv # the syscall names-to-IDs mapping outputted by the dataset pre-processing scripts
+    export NORMAL_TRAIN_H5=<path>.h5  
+    export NORMAL_VALID_H5=<path>.h5  
+    export NORMAL_TEST_H5=<path>.h5   
+    export ATTACK_TRAIN_H5=<path>.h5  
+    export ATTACK_VALID_H5=<path>.h5  
+    export ATTACK_TEST_H5=<path>.h5   
+    export SYSCALL_MAPPING_PATH=<path>.csv  # Required for the syscall names-to-IDs mapping outputted by the dataset pre-processing scripts
     ```
 
 5. **Run the compatibility step for extracting and putting the H5 files in the correct structure:**
     ```bash
-    poetry run python3 supervised.py -e
+    poetry run python3 supervised.py -e -d /path/to/dataset
     ```
+    Replace `/path/to/dataset` with the directory containing your H5 files.
 
 6. **Pre-process the extracted traces for training and then for inference:**
     Training pre-processing (`-p`) must run before inference pre-processing (`-i`) because the same vocabulary applied for the training data needs to be applied for the inference data.
@@ -76,7 +80,7 @@ This folder contains the implementation and related files for the Graph Neural N
 **NOTE:** You may as well put it all in a single command. But keep in mind that you do not need to run with `-e`, `-p`, and `-i` every time you want to train the model.
 
 ```bash
-poetry run python3 supervised.py -e -p -i -t
+poetry run python3 supervised.py -e -p -i -t -d /path/to/dataset
 ```
 
 For further information on the script parameters, run:
@@ -93,7 +97,7 @@ poetry run python3 supervised.py --help
     ```
 
 2. **Install PyTorch and PyTorch Geometric:**
-    Follow step 2 from the [`supervised.py` script usage](#usage-of-supervisedpy-dongting-dataset) section above.
+    Follow step 2 from the [`supervised.py` script usage](#usage-of-supervisedpy-dongting-and-lid-ds-datasets) section above.
 
 3. **Add the GNN lib base directory to `PYTHONPATH`:**
     ```bash
@@ -144,12 +148,14 @@ export ATTACK_VALID_H5=1_validation.h5
 export ATTACK_TEST_H5=1_test.h5
 ```
 
-## Usage of [`autoencoder.py`](./autoencoder.py) (Unsupervised)
+## Usage of [`autoencoder.py`](./autoencoder.py) (Unsupervised, DongTing and LID-DS Datasets)
+
+This script supports both the DongTing and LID-DS datasets by using the processed graph files from either `supervised.py` or `lid_gnn.py`.
 
 1. **Set up the environment (if not done already):**
-    Follow steps 1-3 from the [`supervised.py` script usage](#usage-of-supervisedpy-dongting-dataset) section.
+    Follow steps 1-3 from the [`supervised.py` script usage](#usage-of-supervisedpy-dongting-and-lid-ds-datasets) section.
 2. **Extract and pre-process the datasets (if not done already):** 
-    Follow the extraction and preprocessing steps from either the [`supervised.py`](#usage-of-supervisedpy-dongting-dataset) or [`lid_gnn.py`](#usage-of-lid_gnnpy-lid-ds-dataset) sections depending on your dataset.
+    Follow the extraction and preprocessing steps from either the [`supervised.py`](#usage-of-supervisedpy-dongting-and-lid-ds-datasets) or [`lid_gnn.py`](#usage-of-lid_gnnpy-lid-ds-dataset) sections depending on your dataset.
 3. **Run the training script:**
     ```bash
     poetry run python3 autoencoder.py \
