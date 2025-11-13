@@ -22,7 +22,7 @@ MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
-MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
+MAX_CLASSIFICATION_WORKERS = int(os.getenv("MAX_CLASSIFICATION_WORKERS", "4"))
 SLIDING_WINDOW_SIZE = int(os.getenv("SLIDING_WINDOW_SIZE", "1024"))
 SLIDING_WINDOW_DELTA = int(os.getenv("SLIDING_WINDOW_DELTA", str(SLIDING_WINDOW_SIZE // 4)))
 
@@ -38,7 +38,8 @@ def main() -> None:
 
     syscall_names_to_ids: Dict[str, int] = load_syscalls_mapping(cast(str, SYSCALL_MAPPING_PATH))
     pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
-    with TetragonMonitor() as monitor, ProcessPoolExecutor(max_workers=int(MAX_CLASSIFICATION_WORKERS)) as executor:
+    with TetragonMonitor() as monitor, \
+         ProcessPoolExecutor(max_workers=MAX_CLASSIFICATION_WORKERS) as executor:
         while _running:
             pid, syscall = monitor.get_next_syscall_name()
             if pid is None or syscall is None:
