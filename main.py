@@ -114,7 +114,8 @@ def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
             reader = csv.reader(f)
             mapping = {row[0]: int(row[1]) for row in reader}
     except Exception as e:
-        raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
+        logging.error(f"Error loading syscall-to-ID mapping from {mapping_path}: {e}")
+        sys.exit(1)
     return mapping
 
 def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int]:
