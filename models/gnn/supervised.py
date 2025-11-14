@@ -2,10 +2,12 @@
 
 import os
 import h5py
+import pathlib
 import logging
 import argparse
 import subprocess
 import multiprocessing
+
 from lib.data.dataset import load_dataset
 from lib.preprocessing.graph_preprocess_dataset import preprocess_dataset
 
@@ -40,17 +42,22 @@ def parse_args() -> argparse.Namespace:
 
 def convert_h5_to_traces(
     h5_path: str,
-    output_dir: str
+    output_dir: str,
+    batch_size: int = 500
 ) -> None:
     """
     Converts sequences of syscall IDs from an H5 file into trace files with numeric IDs, space-separated on one line.
+    Trace files contain a single syscall trace and are organized into subdirectories, each containing a maximum of a
+    pre-defined number of files to avoid hitting filesystem limits.
 
     Args:
         h5_path (str): Path to the input H5 file containing syscall sequences.
         output_dir (str): Directory where the generated trace files will be saved.
+        batch_size (int, optional): Maximum number of trace files per subdirectory. Defaults to 500.
     """
     os.makedirs(output_dir, exist_ok=True)
-    counter = len(os.listdir(output_dir))
+    existing_files_iter = pathlib.Path(output_dir).rglob("**/trace_*.txt")
+    counter = len(list(existing_files_iter))
     with h5py.File(h5_path, "r") as h5f:
         sequences = h5f["sequences"]
         for seq in sequences:
@@ -58,7 +65,10 @@ def convert_h5_to_traces(
                 # skip sequences with one or zero syscalls as they cannot be
                 # used to build a graph
                 continue
-            trace_path = os.path.join(output_dir, f"trace_{counter}.txt")
+            subdir_index = counter // batch_size
+            subdir_path = os.path.join(output_dir, f"batch_{subdir_index}")
+            os.makedirs(subdir_path, exist_ok=True)
+            trace_path = os.path.join(subdir_path, f"trace_{counter}.txt")
             logging.debug(f"Writing {trace_path} with {len(seq)} syscalls")
             with open(trace_path, "w") as f:
                 f.write(" ".join(str(id) for id in seq))
