@@ -69,10 +69,9 @@ class TetragonMonitor:
             return False
         
         try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            sock.settimeout(2.0)
-            sock.connect(socket_path)
-            sock.close()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2.0)
+                sock.connect(socket_path)
         except (socket.error, OSError):
             return False
         
