@@ -76,6 +76,10 @@ def setup_signals() -> None:
 
 def ensure_env() -> None:
     """Ensures the required environment variables are set."""
+    is_sudo = os.geteuid() == 0
+    if not is_sudo:
+        logging.error("ARGOS HIDS must be run with root privileges (e.g., via sudo).")
+        sys.exit(1)
     if not ARGOS_NTFY_TOPIC:
         logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
         sys.exit(1)
