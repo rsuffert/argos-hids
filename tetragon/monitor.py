@@ -87,9 +87,9 @@ class TetragonMonitor:
         retries = 5
         delay = 3
         for _ in range(retries):
+            time.sleep(delay)
             if self._is_tetragon_running():
                 return
-            time.sleep(delay)
             
         raise FailedToStartTetragonError(f"Tetragon failed to start after {retries} "
                                          f"attempts with {delay} seconds delay each.")
