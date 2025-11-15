@@ -75,7 +75,7 @@ def setup_signals() -> None:
     signal.signal(signal.SIGTERM, handle_signal) # kill
 
 def ensure_env() -> None:
-    """Ensures the required environment variables are set."""
+    """Ensures the required environment variables and permissions are set."""
     is_sudo = os.geteuid() == 0
     if not is_sudo:
         logging.error("ARGOS HIDS must be run with root privileges (e.g., via sudo).")
