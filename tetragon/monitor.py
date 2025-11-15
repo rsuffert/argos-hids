@@ -70,7 +70,7 @@ class TetragonMonitor:
         
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-                sock.settimeout(2.0)
+                sock.settimeout(1.0)
                 sock.connect(socket_path)
         except (socket.error, OSError):
             return False
