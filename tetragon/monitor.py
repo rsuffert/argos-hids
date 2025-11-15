@@ -35,8 +35,12 @@ class TetragonMonitor:
         self._tetragon_config_dir = TETRAGON_CONFIG_DIR
         self._tetragon_socket = TETRAGON_SOCKET
 
-        self._ensure_config()
+        if not self._is_systemd_available():
+            raise EnvironmentError("systemd is not available and is required to manage Tetragon service.")
+        if not self._is_tetragon_installed():
+            raise EnvironmentError(f"Tetragon binary '{self._tetragon_bin}' not found. Have you added it to your PATH?")
 
+        self._ensure_config()
         try:
             self._ensure_tetragon_running()
         except Exception as e:
@@ -49,8 +53,22 @@ class TetragonMonitor:
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Tetragon via gRPC: {e}") from e
     
+    def _is_systemd_available(self) -> bool:
+        """Check if systemd is available on the system."""
+        try:
+            subprocess.run(["systemctl", "--version"], check=True, capture_output=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+    
+    def _is_tetragon_installed(self) -> bool:
+        """Check if Tetragon is installed on the system."""
+        return shutil.which(self._tetragon_bin) is not None
+
     def _ensure_config(self) -> None:
         """Copy the Tetragon config file to the appropriate directory if not already present."""
+        if not os.path.exists(self._tetragon_config_dir):
+            os.makedirs(self._tetragon_config_dir, exist_ok=True)
         dest_path = os.path.join(self._tetragon_config_dir, os.path.basename(self._config_path))
         if os.path.exists(dest_path):
             return
