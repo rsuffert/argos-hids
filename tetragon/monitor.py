@@ -8,6 +8,7 @@ import subprocess
 import time
 import os
 import shutil
+import socket
 import grpc
 import pyseccomp as sc
 from tetragon.proto.sensors_pb2_grpc import FineGuidanceSensorsStub
@@ -17,6 +18,12 @@ TETRAGON_BIN = "tetragon" # NOTE: assuming Tetragon is in PATH
 TETRAGON_SOCKET = "unix:///run/tetragon/tetragon.sock"
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
 TETRAGON_CONFIG_DIR = os.path.join("/etc", "tetragon", "tetragon.tp.d")
+
+class FailedToStartTetragonError(Exception):
+    """Exception raised when Tetragon fails to start properly."""
+    def __init__(self, message: str) -> None:
+        """Initialize the exception with a message."""
+        super().__init__(message)
 
 class TetragonMonitor:
     """Class to manage Tetragon syscall monitoring."""
@@ -28,8 +35,12 @@ class TetragonMonitor:
         self._tetragon_config_dir = TETRAGON_CONFIG_DIR
         self._tetragon_socket = TETRAGON_SOCKET
 
-        self._ensure_config()
+        if not self._is_systemd_available():
+            raise EnvironmentError("systemd is not available and is required to manage Tetragon service.")
+        if not self._is_tetragon_installed():
+            raise EnvironmentError(f"Tetragon binary '{self._tetragon_bin}' not found. Have you added it to your PATH?")
 
+        self._ensure_config()
         try:
             self._ensure_tetragon_running()
         except Exception as e:
@@ -42,21 +53,64 @@ class TetragonMonitor:
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Tetragon via gRPC: {e}") from e
     
+    def _is_systemd_available(self) -> bool:
+        """Check if systemd is available on the system."""
+        try:
+            subprocess.run(["systemctl", "--version"], check=True, capture_output=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+    
+    def _is_tetragon_installed(self) -> bool:
+        """Check if Tetragon is installed on the system."""
+        return shutil.which(self._tetragon_bin) is not None
+
     def _ensure_config(self) -> None:
         """Copy the Tetragon config file to the appropriate directory if not already present."""
+        if not os.path.exists(self._tetragon_config_dir):
+            os.makedirs(self._tetragon_config_dir, exist_ok=True)
         dest_path = os.path.join(self._tetragon_config_dir, os.path.basename(self._config_path))
         if os.path.exists(dest_path):
             return
         shutil.copy(self._config_path, dest_path)
     
+    def _is_tetragon_running(self) -> bool:
+        """Check if the Tetragon service is running and ready."""
+        status = subprocess.run(["systemctl", "is-active", "--quiet", "tetragon"])
+        service_ready = status.returncode == 0
+        if not service_ready:
+            return False
+        
+        socket_path = self._tetragon_socket.replace("unix://", "")
+        socket_created = os.path.exists(socket_path)
+        if not socket_created:
+            return False
+        
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1.0)
+                sock.connect(socket_path)
+        except (socket.error, OSError):
+            return False
+        
+        return True
+    
     def _ensure_tetragon_running(self) -> None:
         """Start the Tetragon service if not already running."""
-        status = subprocess.run(["systemctl", "is-active", "--quiet", "tetragon"])
-        tetragon_running = status.returncode == 0
-        if tetragon_running:
+        if self._is_tetragon_running():
             return
-        subprocess.run(["sudo", "systemctl", "start", "tetragon"], check=True)
-        time.sleep(3) # give Tetragon time to start
+        
+        subprocess.run(["systemctl", "start", "tetragon"], check=True)
+
+        retries = 5
+        delay = 3
+        for _ in range(retries):
+            time.sleep(delay)
+            if self._is_tetragon_running():
+                return
+            
+        raise FailedToStartTetragonError(f"Tetragon failed to start after {retries} "
+                                         f"attempts with {delay} seconds delay each.")
 
     def get_next_syscall_id(self) -> Tuple[Optional[int], Optional[int]]:
         """
@@ -104,7 +158,7 @@ class TetragonMonitor:
         """Context manager exit method."""
         # Stop the Tetragon service and close the gRPC channel
         try:
-            subprocess.run(["sudo", "systemctl", "stop", "tetragon"], check=True)
+            subprocess.run(["systemctl", "stop", "tetragon"], check=True)
             self._tetragon_grpc_chan.close()
         except Exception as e:
             raise ResourceWarning(f"Failed to release Tetragon monitor resources: {e}") from e
