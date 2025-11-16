@@ -18,6 +18,7 @@ from concurrent.futures import ProcessPoolExecutor, Future
 from dotenv import load_dotenv
 
 load_dotenv()
+LOG_FILE_PATH = "argos.log"
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
@@ -180,7 +181,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        filename=LOG_FILE_PATH,
+        filemode="a"
     )
     setup_signals()
     ensure_env()
