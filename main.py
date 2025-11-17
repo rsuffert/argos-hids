@@ -119,7 +119,7 @@ def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
             reader = csv.reader(f)
             mapping = {row[0]: int(row[1]) for row in reader}
     except Exception as e:
-        logging.error(f"Error loading syscall-to-ID mapping from {mapping_path}: {e}")
+        logging.error("Error loading syscall-to-ID mapping from {mapping_path}", exc_info=e)
         sys.exit(1)
     return mapping
 
@@ -142,7 +142,11 @@ def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int
     # since the child process wouldn't inherit it from the parent as
     # we're using "spawn" instead of "fork". the Singleton pattern
     # ensures that each worker process only loads the model once.
-    ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
+    try:
+        ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
+    except AttributeError as e:
+        logging.error(f"Failed to instantiate model from '{TRAINED_MODEL_PATH}'", exc_info=e)
+        return False, pid
     is_malicious = ModelSingleton.classify(sequence)
     if is_malicious:
         notify_push(
@@ -187,4 +191,7 @@ if __name__ == "__main__":
     )
     setup_signals()
     ensure_env()
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.error("An unexpected error occurred in the main loop", exc_info=e)
