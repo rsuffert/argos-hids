@@ -15,6 +15,7 @@ from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.inference import ModelSingleton
 from concurrent.futures import ProcessPoolExecutor, Future
+from concurrent.futures.process import BrokenProcessPool
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -165,6 +166,14 @@ def classification_done_callback(future: Future) -> None:
     Args:
         future (Future): The future (promise) returned by the async classification task.
     """
+    is_process_terminating = isinstance(
+        future.exception(),
+        (KeyboardInterrupt, BrokenProcessPool)
+    )
+    if future.cancelled() or is_process_terminating:
+        # the process is terminating, so just return and avoid
+        # logging unnecessary errors
+        return
     if future.exception():
         logging.error("Failed to classify sequence", exc_info=future.exception())
         return
