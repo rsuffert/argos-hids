@@ -2,7 +2,6 @@
 
 import torch
 import zipfile
-import inspect
 from enum import Enum
 from torch.package import PackageImporter
 from typing import Tuple, List, Optional, Protocol, cast
@@ -36,13 +35,10 @@ def ensure_predicter(obj: object) -> None:
         obj (object): The object to verify.
     """
     if not hasattr(obj, "predict") or not callable(obj.predict):
-        raise AttributeError("Loaded model must implement a 'predict' method")
-    sig = inspect.signature(obj.predict)
-    params = list(sig.parameters.values())
-    if len(params) != 1 or params[0].annotation is not torch.Tensor:
-        raise AttributeError("The 'predict' method must accept exactly one torch.Tensor argument")
-    if sig.return_annotation is not bool:
-        raise AttributeError("The 'predict' method must return a bool")
+        raise AttributeError(
+            "Loaded model must implement a 'predict(sequence: torch.Tensor) -> bool' method"
+        )
+
 
 def is_torchscript(pt_file: str) -> bool:
     """
