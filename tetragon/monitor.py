@@ -5,6 +5,7 @@ Notice that applications that consume this module must run with elevated privile
 
 from typing import Tuple, Optional
 import subprocess
+import warnings
 import time
 import os
 import shutil
@@ -161,7 +162,11 @@ class TetragonMonitor:
             subprocess.run(["systemctl", "stop", "tetragon"], check=True)
             self._tetragon_grpc_chan.close()
         except Exception as e:
-            raise ResourceWarning(f"Failed to release Tetragon monitor resources: {e}") from e
+            warnings.warn(
+                f"Failed to release Tetragon monitor resources: {e}",
+                ResourceWarning,
+                stacklevel=1
+            )
 
 if __name__ == "__main__":
     with TetragonMonitor() as monitor:
