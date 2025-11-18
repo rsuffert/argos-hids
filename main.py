@@ -18,15 +18,36 @@ from concurrent.futures import ProcessPoolExecutor, Future
 from concurrent.futures.process import BrokenProcessPool
 from dotenv import load_dotenv
 
+def safe_int_getenv(var_name: str, default_val: int) -> int:
+    """
+    Safely retrieves an integer environment variable.
+    Returns the default value if the environment variable is not set or is invalid.
+
+    Args:
+        var_name (str): The name of the environment variable.
+        default_val (int): The default value to return if the environment variable is not set or invalid.
+
+    Returns:
+        int: The integer value of the environment variable or the default.
+    """
+    val = os.getenv(var_name)
+    if not val:
+        return default_val
+    try:
+        val_int = int(val)
+    except ValueError:
+        return default_val
+    return val_int
+
 load_dotenv()
 LOG_FILE_PATH = "argos.log"
 MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
 ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
 TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
 SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
-MAX_CLASSIFICATION_WORKERS = int(os.getenv("MAX_CLASSIFICATION_WORKERS", "4"))
-SLIDING_WINDOW_SIZE = int(os.getenv("SLIDING_WINDOW_SIZE", "1024"))
-SLIDING_WINDOW_DELTA = int(os.getenv("SLIDING_WINDOW_DELTA", str(SLIDING_WINDOW_SIZE // 4)))
+MAX_CLASSIFICATION_WORKERS = safe_int_getenv("MAX_CLASSIFICATION_WORKERS", 4)
+SLIDING_WINDOW_SIZE = safe_int_getenv("SLIDING_WINDOW_SIZE", 1024)
+SLIDING_WINDOW_DELTA = safe_int_getenv("SLIDING_WINDOW_DELTA", SLIDING_WINDOW_SIZE // 4)
 
 _running: bool = True
 
@@ -99,6 +120,8 @@ def ensure_env() -> None:
         logging.error(f"Syscall-to-IDs mapping not found: {SYSCALL_MAPPING_PATH}")
         sys.exit(1)
     logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
+    logging.info(f"Using {MAX_CLASSIFICATION_WORKERS} classification workers")
+    logging.info(f"Using sliding window of size {SLIDING_WINDOW_SIZE} and delta {SLIDING_WINDOW_DELTA}")
 
 def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
     """
