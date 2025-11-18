@@ -189,13 +189,11 @@ def classification_done_callback(future: Future) -> None:
     Args:
         future (Future): The future (promise) returned by the async classification task.
     """
-    is_process_terminating = isinstance(
-        future.exception(),
-        (KeyboardInterrupt, BrokenProcessPool)
-    )
-    if future.cancelled() or is_process_terminating:
+    if future.cancelled():
+        return
+    if isinstance(future.exception(), (KeyboardInterrupt, BrokenProcessPool)):
         # the process is terminating, so just return and avoid
-        # logging unnecessary errors
+        # flooding the logs with unnecessary errors
         return
     if future.exception():
         logging.error("Failed to classify sequence", exc_info=future.exception())
