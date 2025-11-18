@@ -168,7 +168,7 @@ def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int
     # ensures that each worker process only loads the model once.
     try:
         ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
-    except AttributeError as e:
+    except Exception as e:
         logging.error(f"Failed to instantiate model from '{TRAINED_MODEL_PATH}'", exc_info=e)
         return False, pid
     is_malicious = ModelSingleton.classify(sequence)
