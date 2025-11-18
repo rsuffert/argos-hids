@@ -143,7 +143,7 @@ def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
             reader = csv.reader(f)
             mapping = {row[0]: int(row[1]) for row in reader}
     except Exception as e:
-        logging.error("Error loading syscall-to-ID mapping from {mapping_path}", exc_info=e)
+        logging.error(f"Error loading syscall-to-ID mapping from {mapping_path}", exc_info=e)
         sys.exit(1)
     return mapping
 
