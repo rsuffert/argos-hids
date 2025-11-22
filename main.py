@@ -4,10 +4,10 @@ import os
 import sys
 import csv
 import time
-import socket
 import signal
 import logging
 import multiprocessing
+from config import Config
 from argparse import ArgumentParser
 from collections import defaultdict
 from typing import Dict, List, Tuple, cast
@@ -15,30 +15,23 @@ from notifications.ntfy import notify_push, Priority
 from tetragon.monitor import TetragonMonitor
 from models.inference import ModelSingleton
 from concurrent.futures import ProcessPoolExecutor, Future
-from dotenv import load_dotenv
-
-load_dotenv()
-MACHINE_NAME = os.getenv("MACHINE_NAME", socket.gethostname())
-ARGOS_NTFY_TOPIC = os.getenv("ARGOS_NTFY_TOPIC")
-TRAINED_MODEL_PATH = os.getenv("TRAINED_MODEL_PATH")
-SYSCALL_MAPPING_PATH = os.getenv("SYSCALL_MAPPING_PATH")
-MAX_CLASSIFICATION_WORKERS = os.getenv("MAX_CLASSIFICATION_WORKERS", "4")
-SLIDING_WINDOW_SIZE = int(os.getenv("SLIDING_WINDOW_SIZE", "1024"))
-SLIDING_WINDOW_DELTA = int(os.getenv("SLIDING_WINDOW_DELTA", str(SLIDING_WINDOW_SIZE // 4)))
+from concurrent.futures.process import BrokenProcessPool
 
 _running: bool = True
+_config: Config = Config()
 
 def main() -> None:
     """Main function to run the ARGOS HIDS."""
-    global _running
+    global _running, _config
 
     # 'spawn' start method for multiprocessing ensures no state is inherited by subprocesses.
     # this is needed for compatibility with the gRPC libraries, which are not fork-safe.
     multiprocessing.set_start_method("spawn", force=True)
 
-    syscall_names_to_ids: Dict[str, int] = load_syscalls_mapping(cast(str, SYSCALL_MAPPING_PATH))
+    syscall_names_to_ids: Dict[str, int] = load_syscalls_mapping(cast(str, _config.SYSCALL_MAPPING_PATH))
     pids_to_syscalls: Dict[int, List[int]] = defaultdict(list)
-    with TetragonMonitor() as monitor, ProcessPoolExecutor(max_workers=int(MAX_CLASSIFICATION_WORKERS)) as executor:
+    with TetragonMonitor() as monitor, \
+         ProcessPoolExecutor(max_workers=_config.MAX_CLASSIFICATION_WORKERS) as executor:
         while _running:
             pid, syscall = monitor.get_next_syscall_name()
             if pid is None or syscall is None:
@@ -49,18 +42,18 @@ def main() -> None:
             
             syscalls_from_current_pid = pids_to_syscalls[pid]
             syscalls_from_current_pid.append(syscall_names_to_ids.get(syscall, -1))
-            if len(syscalls_from_current_pid) < SLIDING_WINDOW_SIZE:
+            if len(syscalls_from_current_pid) < _config.SLIDING_WINDOW_SIZE:
                 continue # sequence not long enough yet
             
             # asynchronously submit sequence for classification
             executor.submit(
                 classification_worker_impl,
-                syscalls_from_current_pid[:SLIDING_WINDOW_SIZE],
+                syscalls_from_current_pid[:_config.SLIDING_WINDOW_SIZE],
                 pid
             ).add_done_callback(classification_done_callback)
             
             # remove the oldest syscalls from the list
-            pids_to_syscalls[pid] = syscalls_from_current_pid[SLIDING_WINDOW_DELTA:]
+            pids_to_syscalls[pid] = syscalls_from_current_pid[_config.SLIDING_WINDOW_DELTA:]
 
 def setup_signals() -> None:
     """
@@ -76,26 +69,17 @@ def setup_signals() -> None:
 
 def ensure_env() -> None:
     """Ensures the required environment variables and permissions are set."""
+    global _config
     is_sudo = os.geteuid() == 0
     if not is_sudo:
         logging.error("ARGOS HIDS must be run with root privileges (e.g., via sudo).")
         sys.exit(1)
-    if not ARGOS_NTFY_TOPIC:
-        logging.error("ARGOS_NTFY_TOPIC environment variable is not set.")
+    try:
+        _config.validate()
+    except Exception as e:
+        logging.error("Configuration validation failed.", exc_info=e)
         sys.exit(1)
-    if not TRAINED_MODEL_PATH:
-        logging.error("TRAINED_MODEL_PATH environment variable is not set.")
-        sys.exit(1)
-    if not SYSCALL_MAPPING_PATH:
-        logging.error("SYSCALL_MAPPING_PATH environment variable is not set.")
-        sys.exit(1)
-    if not os.path.exists(TRAINED_MODEL_PATH):
-        logging.error(f"Trained model file not found: {TRAINED_MODEL_PATH}")
-        sys.exit(1)
-    if not os.path.exists(SYSCALL_MAPPING_PATH):
-        logging.error(f"Syscall-to-IDs mapping not found: {SYSCALL_MAPPING_PATH}")
-        sys.exit(1)
-    logging.info(f"Starting ARGOS HIDS on machine '{MACHINE_NAME}'")
+    logging.info(f"Starting ARGOS HIDS on machine '{_config.MACHINE_NAME}'")
 
 def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
     """
@@ -117,7 +101,8 @@ def load_syscalls_mapping(mapping_path: str) -> Dict[str, int]:
             reader = csv.reader(f)
             mapping = {row[0]: int(row[1]) for row in reader}
     except Exception as e:
-        raise RuntimeError(f"Failed to parse syscall-to-ID mapping: {e}") from e
+        logging.error(f"Error loading syscall-to-ID mapping from {mapping_path}", exc_info=e)
+        sys.exit(1)
     return mapping
 
 def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int]:
@@ -135,17 +120,22 @@ def classification_worker_impl(sequence: List[int], pid: int) -> Tuple[bool, int
                           (this returned data is meant to be used for logging
                           purposes in the parent/main process).
     """
+    global _config
     # each worker process will need to have its own Singleton instance,
     # since the child process wouldn't inherit it from the parent as
     # we're using "spawn" instead of "fork". the Singleton pattern
     # ensures that each worker process only loads the model once.
-    ModelSingleton.instantiate(cast(str, TRAINED_MODEL_PATH))
+    try:
+        ModelSingleton.instantiate(cast(str, _config.TRAINED_MODEL_PATH))
+    except Exception as e:
+        logging.error(f"Failed to instantiate model from '{_config.TRAINED_MODEL_PATH}'", exc_info=e)
+        return False, pid
     is_malicious = ModelSingleton.classify(sequence)
     if is_malicious:
         notify_push(
-            topic=cast(str, ARGOS_NTFY_TOPIC),
-            message=f"ARGOS HIDS has flagged a potential intrusion on {MACHINE_NAME}.",
-            title=f"Intrusion Alert for {MACHINE_NAME}",
+            topic=cast(str, _config.ARGOS_NTFY_TOPIC),
+            message=f"ARGOS HIDS has flagged a potential intrusion on {_config.MACHINE_NAME}.",
+            title=f"Intrusion Alert for {_config.MACHINE_NAME}",
             tags=["warning"],
             priority=Priority.MAX
         )
@@ -158,6 +148,12 @@ def classification_done_callback(future: Future) -> None:
     Args:
         future (Future): The future (promise) returned by the async classification task.
     """
+    if future.cancelled():
+        return
+    if isinstance(future.exception(), (KeyboardInterrupt, BrokenProcessPool)):
+        # the process is terminating, so just return and avoid
+        # flooding the logs with unnecessary errors
+        return
     if future.exception():
         logging.error("Failed to classify sequence", exc_info=future.exception())
         return
@@ -178,8 +174,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        filename=_config.LOG_FILE_PATH,
+        filemode="a"
     )
     setup_signals()
     ensure_env()
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.error("An unexpected error occurred in the main loop", exc_info=e)
