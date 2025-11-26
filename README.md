@@ -61,6 +61,7 @@ poetry run python3 main.py --help
 The solution is organized in the following manner:
 
 - The `main.py` file is the entrypoint for the code and contains the main processing loop for the system.
+- The `config.py` file handles reading and loading the configuration parameters that can be passed to the system.
 - The `dataparse` folder contains the pre-processing scripts for the datasets used to train the intrusion detection models. Each sub-folder represents a dataset.
 - The `models` folder contains the scripts to train the intrusion detection models. Each sub-folder represents a ML model, and the `inference.py` Python module can be used to apply those models for inference in production.
 - The `notifications` folder contains the scripts to use the Ntfy functionality to send intrusion detection notifications.
